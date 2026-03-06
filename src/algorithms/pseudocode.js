@@ -1,0 +1,80 @@
+export const PSEUDOCODE = {
+    dfs: [
+        "function DFS(u):",           // 0
+        "  mark u as Visited (Gray)", // 1
+        "  for each neighbor v of u:",// 2
+        "    if v is Unvisited:",     // 3
+        "      DFS(v)",               // 4
+        "  mark u as Finished (Black)"// 5
+    ],
+    bfs: [
+        "function BFS(start):",       // 0
+        "  create queue Q, enqueue start", // 1
+        "  mark start as Visited",    // 2
+        "  while Q is not empty:",    // 3
+        "    u = Q.dequeue()",        // 4
+        "    for each neighbor v of u:", // 5
+        "      if v is Unvisited:",   // 6
+        "        mark v as Visited",  // 7
+        "        Q.enqueue(v)"        // 8
+    ],
+    dijkstra: [
+        "function Dijkstra(start):",  // 0
+        "  dist[start] = 0, Q.push(start)", // 1
+        "  while Q is not empty:",    // 2
+        "    u = Q.extractMin()",     // 3
+        "    for each neighbor v of u:", // 4
+        "      alt = dist[u] + weight(u, v)", // 5
+        "      if alt < dist[v]:",    // 6
+        "        dist[v] = alt",      // 7
+        "        Q.decreaseKey(v, alt)" // 8
+    ],
+    prim: [
+        "function Prim(start):",      // 0
+        "  key[start] = 0, Q.push(start)", // 1
+        "  while Q is not empty:",    // 2
+        "    u = Q.extractMin()",     // 3
+        "    add u to MST",           // 4
+        "    for each neighbor v of u:", // 5
+        "      if v not in MST and weight < key[v]:", // 6
+        "        parent[v] = u",      // 7
+        "        key[v] = weight",    // 8
+        "        Q.decreaseKey(v, weight)" // 9
+    ],
+    kruskal: [
+        "function Kruskal():",        // 0
+        "  sort edges by weight",     // 1
+        "  for each edge (u, v):",    // 2
+        "    if find(u) != find(v):", // 3
+        "      union(u, v)",          // 4
+        "      add edge to MST"       // 5
+    ],
+    scc: [
+        "function TarjanSCC(u):",
+        "  ids[u], low[u] = time++, stack.push(u)",
+        "  onStack[u] = true",
+        "  for each neighbor v:",
+        "    if not visited[v]:",
+        "      TarjanSCC(v)",
+        "      low[u] = min(low[u], low[v])",
+        "    else if onStack[v]:",
+        "      low[u] = min(low[u], ids[v])",
+        "  if ids[u] == low[u]:",
+        "    pop from stack until u (new SCC)"
+    ],
+    distanceVector: [
+        "function DistanceVector(N):",       // 0
+        "  Loop until converged (or N-1):",  // 1
+        "    For each edge (u, v):",         // 2
+        "      if dist(u) > dist(v) + w:",   // 3
+        "        dist(u) = dist(v) + w",     // 4
+        "        notify neighbors"           // 5
+    ],
+    linkState: [
+        "function LinkStateRouting():",      // 0
+        "  Flooding Phase: Broadcast LSAs",  // 1
+        "  For each node u:",                // 2
+        "    Run Dijkstra(u) on LSDB",       // 3
+        "    Update Routing Table of u"      // 4
+    ]
+};

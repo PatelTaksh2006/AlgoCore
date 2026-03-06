@@ -2,47 +2,44 @@ import React, { useMemo } from 'react';
 import { useGraph } from '../context/GraphContext';
 import useGraphStore from '../store/useGraphStore';
 import { calculateTreeLayout } from '../utils/treeLayout';
+import { calculateSCCLayout } from '../utils/sccLayout'; // New import
+import { useAlgorithm } from '../context/AlgorithmContext'; // New import
 // eslint-disable-next-line no-unused-vars
 import { motion } from 'framer-motion';
 
 const ResultTree = () => {
     const { nodes, edges } = useGraph();
     const { backEdges } = useGraphStore();
+    const { selectedAlgorithm, components } = useAlgorithm(); // Get component data
 
     // Filter nodes and edges involved in the tree
     const treeEdges = edges.filter(e => e.classification === 'tree');
 
-    // Debug log
-    if (treeEdges.length > 0 || edges.length > 0) {
-        console.log('ResultTree Render:', {
-            totalEdges: edges.length,
-            treeEdges: treeEdges.length,
-            edgeClassifications: edges.map(e => e.classification)
+    const { positions, labels } = useMemo(() => {
+        if (selectedAlgorithm === 'scc') {
+            return calculateSCCLayout(components, nodes);
+        }
+        return { positions: calculateTreeLayout(nodes, edges), labels: [] };
+    }, [nodes, edges, selectedAlgorithm, components]);
+
+    // For SCC, we want to show edges within components
+    const sccEdges = useMemo(() => {
+        if (selectedAlgorithm !== 'scc' || !components) return [];
+
+        const edgesToShow = [];
+        edges.forEach(e => {
+            if (positions[e.source] && positions[e.target]) {
+                edgesToShow.push(e);
+            }
         });
-    }
+        return edgesToShow;
+    }, [edges, positions, selectedAlgorithm, components]);
 
-    // Nodes involved are those in treeEdges (source or target) plus potentially the root
-    // To be safe, we just consider all nodes but map them to tree positions.
-    // If a node is not in the tree, we might skip rendering or render it unconnected?
-    // Prompt says: "As a 'Tree Edge' is confirmed... node must appear".
-    // So filter nodes.
+    const visibleNodes = nodes.filter(n => positions[n.id]);
+    const hasTree = Object.keys(positions).length > 0;
 
-    const relevantNodeIds = new Set();
-    treeEdges.forEach(e => {
-        relevantNodeIds.add(e.source);
-        relevantNodeIds.add(e.target);
-    });
-    // Add start node if we have one? 
-    // Usually the first node involved in a tree edge is the start.
-    // If no edges, empty tree.
-
-    const treePositions = useMemo(() => calculateTreeLayout(nodes, edges), [nodes, edges]);
-
-    const visibleNodes = nodes.filter(n => relevantNodeIds.has(n.id) || (treeEdges.length > 0 && n.id === edges.find(e => e.classification === 'tree')?.source));
-    // The filtering logic in `calculateTreeLayout` handles root finding better. 
-    // Let's just render nodes that have a position in `treePositions`.
-
-    const hasTree = Object.keys(treePositions).length > 0;
+    // Determine edges to render: Tree edges OR SCC edges
+    const edgesToRender = selectedAlgorithm === 'scc' ? sccEdges : treeEdges;
 
     return (
         <div className="w-full h-full relative bg-gray-50 border-l border-gray-200 overflow-hidden">
@@ -65,9 +62,9 @@ const ResultTree = () => {
                         <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
                     </marker>
                 </defs>
-                {treeEdges.map(edge => {
-                    const sourcePos = treePositions[edge.source];
-                    const targetPos = treePositions[edge.target];
+                {edgesToRender.map(edge => {
+                    const sourcePos = positions[edge.source];
+                    const targetPos = positions[edge.target];
                     if (!sourcePos || !targetPos) return null;
 
                     return (
@@ -80,15 +77,16 @@ const ResultTree = () => {
                             y1={sourcePos.y}
                             x2={targetPos.x}
                             y2={targetPos.y}
-                            stroke="#2563eb"
+                            stroke={selectedAlgorithm === 'scc' ? '#8b5cf6' : "#2563eb"} // Purple for SCC, Blue for Tree
                             strokeWidth="2"
                             markerEnd="url(#tree-arrow)"
                         />
                     );
                 })}
-                {backEdges.map((edge, i) => {
-                    const sourcePos = treePositions[edge.source];
-                    const targetPos = treePositions[edge.target];
+                {/* Back Edges - Only show if not SCC (or maybe show them differently?) */}
+                {selectedAlgorithm !== 'scc' && backEdges.map((edge, i) => {
+                    const sourcePos = positions[edge.source];
+                    const targetPos = positions[edge.target];
                     if (!sourcePos || !targetPos) return null;
 
                     // Curved path for back edges to distinguish them
@@ -115,24 +113,40 @@ const ResultTree = () => {
                 })}
             </svg>
 
-            {visibleNodes.map(node => {
-                const pos = treePositions[node.id];
-                if (!pos) return null;
+            {labels?.map(label => (
+                <div
+                    key={label.id}
+                    className="absolute text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200 z-0"
+                    style={{
+                        left: label.x,
+                        top: label.y,
+                        transform: 'translate(-50%, -50%)'
+                    }}
+                >
+                    {label.text}
+                </div>
+            ))}
 
-                return (
-                    <motion.div
-                        key={node.id}
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1, x: pos.x, y: pos.y }}
-                        transition={{ duration: 0.4 }} // Smooth entry
-                        className="absolute w-10 h-10 rounded-full bg-white border-2 border-blue-500 flex items-center justify-center shadow-sm z-10"
-                        style={{ marginLeft: -20, marginTop: -20 }}
-                    >
-                        <span className="text-xs font-bold text-gray-700">{node.label}</span>
-                    </motion.div>
-                );
-            })}
-        </div>
+            {
+                visibleNodes.map(node => {
+                    const pos = positions[node.id];
+                    if (!pos) return null;
+
+                    return (
+                        <motion.div
+                            key={node.id}
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1, x: pos.x, y: pos.y }}
+                            transition={{ duration: 0.4 }} // Smooth entry
+                            className={`absolute w-10 h-10 rounded-full bg-white border-2 flex items-center justify-center shadow-sm z-10 ${selectedAlgorithm === 'scc' ? 'border-purple-500' : 'border-blue-500'}`}
+                            style={{ marginLeft: -20, marginTop: -20 }}
+                        >
+                            <span className="text-xs font-bold text-gray-700">{node.label}</span>
+                        </motion.div>
+                    );
+                })
+            }
+        </div >
     );
 };
 

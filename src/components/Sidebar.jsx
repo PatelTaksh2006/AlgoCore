@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useGraph } from '../context/GraphContext';
 import { useAlgorithm } from '../context/AlgorithmContext';
-import { Play, Pause, RotateCcw, Settings, Plus, Trash2 } from 'lucide-react';
+import { Play, Pause, RotateCcw, Settings, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 import { SAMPLES } from '../services/sampleData';
+import { PSEUDOCODE } from '../algorithms/pseudocode';
 
 const Sidebar = () => {
     const {
@@ -15,7 +16,8 @@ const Sidebar = () => {
     const {
         selectedAlgorithm, setSelectedAlgorithm,
         runAlgorithm, isPlaying, setIsPlaying,
-        speed, setSpeed, resetAlgorithm
+        speed, setSpeed, resetAlgorithm,
+        nextStep, prevStep, currentStep, currentLine
     } = useAlgorithm();
 
     const [edgeInput, setEdgeInput] = useState({ source: '', target: '', weight: '1' });
@@ -149,7 +151,42 @@ const Sidebar = () => {
                         <option value="dijkstra">Dijkstra's Shortest Path</option>
                         <option value="prim">Prim's MST</option>
                         <option value="kruskal">Kruskal's MST</option>
+                        <option value="scc">Strongly Connected Components</option>
+                        <option value="distanceVector">Distance Vector Routing</option>
+                        <option value="linkState">Link State Routing</option>
                     </select>
+                </div>
+
+                {/* Code Visualization */}
+                <div className="space-y-3 pt-4 border-t border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Code Execution</h3>
+                    <div className="bg-gray-50 p-2 rounded-md border border-gray-200 font-mono text-xs overflow-hidden h-16 flex flex-col justify-center">
+                        {(() => {
+                            const codeLines = PSEUDOCODE[selectedAlgorithm] || [];
+                            const line = currentLine;
+
+                            // We want nicely centered 3 lines: prev, curr, next
+                            // If line is -1 (start), show first few? Or just empty?
+                            // User request: "curr executing, next line, previous line"
+                            // If not running (line = -1), maybe show just start of code or empty?
+
+                            if (line === -1) {
+                                return <div className="text-gray-400 italic text-center">Ready to run...</div>;
+                            }
+
+                            const prev = codeLines[line - 1] || '\u00A0'; // Non-breaking space for empty
+                            const curr = codeLines[line] || 'Done';
+                            const next = codeLines[line + 1] || '\u00A0';
+
+                            return (
+                                <>
+                                    <div className="text-gray-400 truncate whitespace-nowrap">{prev}</div>
+                                    <div className="text-blue-600 font-bold truncate whitespace-nowrap bg-blue-50 -mx-2 px-2 py-0.5">{curr}</div>
+                                    <div className="text-gray-400 truncate whitespace-nowrap">{next}</div>
+                                </>
+                            );
+                        })()}
+                    </div>
                 </div>
             </div>
 
@@ -169,6 +206,15 @@ const Sidebar = () => {
                 </div>
 
                 <div className="flex gap-2">
+                    <button
+                        onClick={prevStep}
+                        disabled={currentStep === 0 || isPlaying}
+                        className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Previous Step"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+
                     {!isPlaying ? (
                         <button
                             onClick={() => { runAlgorithm(); setIsPlaying(true); }}
@@ -184,6 +230,17 @@ const Sidebar = () => {
                             <Pause className="w-4 h-4" /> Pause
                         </button>
                     )}
+
+                    <button
+                        onClick={() => {
+                            setIsPlaying(false);
+                            nextStep();
+                        }}
+                        className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors"
+                        title="Next Step"
+                    >
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
 
                     <button
                         onClick={resetAlgorithm}
