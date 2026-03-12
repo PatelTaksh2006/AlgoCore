@@ -12,6 +12,11 @@ const useGraphStore = create((set) => ({
     routingTable: {}, // { nodeId: { destId: { dist: number, nextHop: nodeId } } }
     activeTableNodeId: null, // The ID of the node currently processing its routing table
 
+    // Added features state
+    internalState: null,
+    resultData: null,
+    resultLayout: {},
+
     // Link State Database (for LSR)
     lsdb: [], // Array of LSAs
 
@@ -56,7 +61,10 @@ const useGraphStore = create((set) => ({
         backEdges: [],
         routingTable: {},
         activeTableNodeId: null,
-        lsdb: []
+        lsdb: [],
+        resultData: null,
+        internalState: null,
+        resultLayout: {}
     }),
 
     updateRoutingTable: (table) => set({
@@ -69,6 +77,19 @@ const useGraphStore = create((set) => ({
 
     addLsa: (lsa) => set(state => ({
         lsdb: [...state.lsdb, lsa]
+    })),
+
+    setInternalState: (internalState) => set({ internalState }),
+    
+    setResultData: (resultData) => set({ resultData }),
+    
+    setResultLayout: (layout) => set({ resultLayout: layout }),
+    
+    updateResultNodePos: (id, x, y) => set((state) => ({
+        resultLayout: {
+            ...state.resultLayout,
+            [id]: { x, y }
+        }
     })),
 }));
 

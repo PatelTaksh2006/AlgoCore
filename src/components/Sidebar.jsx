@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useGraph } from '../context/GraphContext';
 import { useAlgorithm } from '../context/AlgorithmContext';
 import { Play, Pause, RotateCcw, Settings, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -10,35 +10,42 @@ import { PSEUDOCODE } from '../algorithms/pseudocode';
 const Sidebar = () => {
     const {
         nodes, edges, isDirected, setIsDirected,
-        addNode, addEdge, resetGraph, loadGraphData
+        addNode, resetGraph, loadGraphData
     } = useGraph();
 
     const {
         selectedAlgorithm, setSelectedAlgorithm,
         runAlgorithm, isPlaying, setIsPlaying,
         speed, setSpeed, resetAlgorithm,
+        startNodeId, setStartNodeId,
+        targetNodeId, setTargetNodeId,
         nextStep, prevStep, currentStep, currentLine
     } = useAlgorithm();
-
-    const [edgeInput, setEdgeInput] = useState({ source: '', target: '', weight: '1' });
 
     const handleLoadSample = () => {
         const sample = SAMPLES[selectedAlgorithm];
         if (sample) {
             resetAlgorithm(); // Stop any running algo
             loadGraphData(sample.nodes, sample.edges, sample.isDirected);
+            // Initialize source/destination with first and last nodes
+            if (sample.nodes.length > 0) {
+                setStartNodeId(sample.nodes[0].id);
+                if (sample.nodes.length > 1) {
+                    setTargetNodeId(sample.nodes[sample.nodes.length - 1].id);
+                }
+            }
         } else {
             console.warn("No sample for", selectedAlgorithm);
-            // Fallback or alert? For now just log.
-            // Maybe load DFS sample as default if not found?
             const defaultSample = SAMPLES['dfs'];
-            if (defaultSample) loadGraphData(defaultSample.nodes, defaultSample.edges, defaultSample.isDirected);
-        }
-    };
-
-    const handleAddEdge = () => {
-        if (edgeInput.source && edgeInput.target) {
-            addEdge(edgeInput.source, edgeInput.target, edgeInput.weight);
+            if (defaultSample) {
+                loadGraphData(defaultSample.nodes, defaultSample.edges, defaultSample.isDirected);
+                if (defaultSample.nodes.length > 0) {
+                    setStartNodeId(defaultSample.nodes[0].id);
+                    if (defaultSample.nodes.length > 1) {
+                        setTargetNodeId(defaultSample.nodes[defaultSample.nodes.length - 1].id);
+                    }
+                }
+            }
         }
     };
 
@@ -93,48 +100,12 @@ const Sidebar = () => {
                     >
                         <Plus className="w-4 h-4" /> Add Random Node
                     </button>
-                </div>
-
-                {/* Edge Input */}
-                <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Add Edge</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                        <select
-                            value={edgeInput.source}
-                            onChange={e => setEdgeInput(p => ({ ...p, source: e.target.value }))}
-                            className="p-2 border rounded-md text-sm bg-gray-50 focus:border-blue-500 outline-none"
-                        >
-                            <option value="">Source</option>
-                            {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
-                        </select>
-                        <select
-                            value={edgeInput.target}
-                            onChange={e => setEdgeInput(p => ({ ...p, target: e.target.value }))}
-                            className="p-2 border rounded-md text-sm bg-gray-50 focus:border-blue-500 outline-none"
-                        >
-                            <option value="">Target</option>
-                            {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
-                        </select>
-                    </div>
-                    <div className="flex gap-2">
-                        <input
-                            type="number"
-                            placeholder="W"
-                            value={edgeInput.weight}
-                            onChange={e => setEdgeInput(p => ({ ...p, weight: e.target.value }))}
-                            className="w-16 p-2 border rounded-md text-sm bg-gray-50 outline-none focus:border-blue-500"
-                        />
-                        <button
-                            onClick={handleAddEdge}
-                            disabled={!edgeInput.source || !edgeInput.target}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Add Edge
-                        </button>
-                    </div>
                     {/* Edge Count */}
-                    <div className="text-xs text-gray-400 text-center">
+                    <div className="text-xs text-gray-400 text-center mt-2">
                         {edges.length} edges | {nodes.length} nodes
+                    </div>
+                    <div className="text-[10px] text-gray-400 text-center italic">
+                        Click node → click another to add edge
                     </div>
                 </div>
 
@@ -152,9 +123,37 @@ const Sidebar = () => {
                         <option value="prim">Prim's MST</option>
                         <option value="kruskal">Kruskal's MST</option>
                         <option value="scc">Strongly Connected Components</option>
+                        <option value="articulationPoints">Articulation Points</option>
                         <option value="distanceVector">Distance Vector Routing</option>
                         <option value="linkState">Link State Routing</option>
+                        <option value="floydWarshall">Floyd-Warshall (APSP)</option>
                     </select>
+                    
+                    <div className="mt-2 text-sm text-gray-600">
+                        Source Node (Optional):
+                        <select
+                            value={startNodeId || ''}
+                            onChange={e => setStartNodeId(e.target.value || null)}
+                            className="mt-1 w-full p-2 border rounded-md bg-gray-50 outline-none focus:border-blue-500"
+                        >
+                            <option value="">Auto (First Node)</option>
+                            {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
+                        </select>
+                    </div>
+                    
+                    {selectedAlgorithm === 'dijkstra' && (
+                        <div className="mt-2 text-sm text-gray-600">
+                            Destination Node (Optional):
+                            <select
+                                value={targetNodeId || ''}
+                                onChange={e => setTargetNodeId(e.target.value || null)}
+                                className="mt-1 w-full p-2 border rounded-md bg-gray-50 outline-none focus:border-blue-500"
+                            >
+                                <option value="">None</option>
+                                {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 {/* Code Visualization */}
@@ -192,17 +191,21 @@ const Sidebar = () => {
 
             {/* Playback Controls */}
             <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-4">
-                <div className="flex items-center gap-2 justify-between">
+                <div className="flex flex-col gap-1">
                     <span className="text-xs font-semibold text-gray-500 uppercase">Speed</span>
-                    <input
-                        type="range"
-                        min="100"
-                        max="2000"
-                        step="100"
-                        value={speed}
-                        onChange={e => setSpeed(Number(e.target.value))}
-                        className="w-24 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
-                    />
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-green-600 font-medium">Fast</span>
+                        <input
+                            type="range"
+                            min="100"
+                            max="2000"
+                            step="100"
+                            value={speed}
+                            onChange={e => setSpeed(Number(e.target.value))}
+                            className="flex-1 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <span className="text-[10px] text-orange-600 font-medium">Slow</span>
+                    </div>
                 </div>
 
                 <div className="flex gap-2">

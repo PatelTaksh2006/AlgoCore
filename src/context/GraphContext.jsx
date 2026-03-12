@@ -9,6 +9,7 @@ export const GraphProvider = ({ children }) => {
     const [nodes, setNodes] = useState([]);
     const [edges, setEdges] = useState([]);
     const [isDirected, setIsDirected] = useState(false);
+    const [selectedNodeForEdge, setSelectedNodeForEdge] = useState(null); // For two-click edge creation
 
     const addNode = useCallback((x, y) => {
         setNodes((prev) => {
@@ -53,6 +54,14 @@ export const GraphProvider = ({ children }) => {
         setEdges(prev => prev.map(e => e.id === id ? { ...e, weight: parseInt(weight) || 1 } : e));
     }, []);
 
+    const updateNodeLabel = useCallback((id, label) => {
+        setNodes(prev => prev.map(n => n.id === id ? { ...n, label } : n));
+    }, []);
+
+    const removeEdge = useCallback((edgeId) => {
+        setEdges(prev => prev.filter(e => e.id !== edgeId));
+    }, []);
+
     const setEdgeClassification = useCallback((edgeId, classification) => {
         setEdges(prev => prev.map(e => e.id === edgeId ? { ...e, classification } : e));
     }, []);
@@ -92,9 +101,10 @@ export const GraphProvider = ({ children }) => {
         <GraphContext.Provider value={{
             nodes, edges, isDirected, setIsDirected,
             addNode, updateNodePos, removeNode,
-            addEdge, updateEdgeWeight, resetGraph, clearClassification,
+            addEdge, updateEdgeWeight, updateNodeLabel, removeEdge, resetGraph, clearClassification,
             setEdgeClassification, setNodeColor, loadGraphData,
-            setNodes, setEdges
+            setNodes, setEdges,
+            selectedNodeForEdge, setSelectedNodeForEdge
         }}>
             {children}
         </GraphContext.Provider>

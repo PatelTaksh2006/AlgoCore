@@ -1,0 +1,2678 @@
+﻿--- C:/Users/taksh/Desktop/sdp/src/App.jsx
++++ C:/Users/taksh/Desktop/sdp_merge/AlgoCore/src/App.jsx
+@@ -1,40 +1,44 @@
+ import React, { useState } from 'react';
+-import { GraphProvider } from './context/GraphContext';
+-import { AlgorithmProvider } from './context/AlgorithmContext';
+ import GraphCanvas from './components/GraphCanvas';
+ import Sidebar from './components/Sidebar';
+-import ResultPanel from './components/ResultPanel';
++import ResultTree from './components/ResultTree';
++import RoutingTable from './components/RoutingTable';
++import LsrPanel from './components/LsrPanel';
+ import DataStructurePanel from './components/DataStructurePanel';
++import { useAlgorithm } from './context/AlgorithmContext';
+ 
+ function App() {
+   // eslint-disable-next-line no-unused-vars
+   const [showResult, setShowResult] = useState(true);
+   const constraintsRef = React.useRef(null);
++  const { selectedAlgorithm } = useAlgorithm();
+ 
+   return (
+-    <GraphProvider>
+-      <AlgorithmProvider>
+-        <div className="flex h-screen w-screen overflow-hidden bg-gray-50">
+-          <Sidebar />
++    <div className="flex h-screen w-screen overflow-hidden bg-gray-50">
++      <Sidebar />
+ 
+-          <div ref={constraintsRef} className="flex-1 relative flex flex-col overflow-hidden">
++      <div className="flex-1 relative flex flex-col" ref={constraintsRef}>
+ 
+-            <DataStructurePanel constraintsRef={constraintsRef} />
++        <DataStructurePanel constraintsRef={constraintsRef} />
+ 
+-            <div className="flex w-full h-full relative">
+-              <div className="flex-1 flex flex-row">
+-                <div className="flex-1 relative border-r border-gray-200 bg-white">
+-                  <GraphCanvas />
+-                </div>
+-                <div className="flex-1 relative border-l border-gray-200 bg-gray-50 overflow-hidden transition-all duration-500" id="result-panel">
+-                  <ResultPanel />
+-                </div>
+-              </div>
++        <div className="flex w-full h-full relative">
++          <div className="flex-1 flex flex-row">
++            <div className="flex-1 relative border-r border-gray-200 bg-white">
++              <GraphCanvas />
++            </div>
++            <div className="flex-1 relative border-l border-gray-200 bg-gray-50 overflow-hidden transition-all duration-500" id="result-panel">
++              {selectedAlgorithm === 'distanceVector' ? <RoutingTable /> :
++                selectedAlgorithm === 'linkState' ? (
++                  <div className="flex flex-col h-full">
++                    <div className="flex-1 min-h-[50%] border-b border-gray-200"><LsrPanel /></div>
++                    <div className="flex-1 min-h-[50%]"><RoutingTable /></div>
++                  </div>
++                ) : <ResultTree />}
+             </div>
+           </div>
+         </div>
+-      </AlgorithmProvider>
+-    </GraphProvider>
++      </div>
++    </div>
+   );
+ }
+ 
+--- C:/Users/taksh/Desktop/sdp/src/algorithms/index.js
++++ C:/Users/taksh/Desktop/sdp_merge/AlgoCore/src/algorithms/index.js
+@@ -1,3 +1,4 @@
++
+ 
+ 
+ export function* dfs(nodes, edges, startNodeId) {
+@@ -13,8 +14,10 @@
+     const discoveryTime = {};
+     const finishTime = {};
+     const colors = {};
+-    const parents = {};
+     let time = 0;
++
++    // Line 0: function DFS(u) - effectively start
++    yield { type: 'SET_LINE', lineIndex: 0 };
+ 
+     for (const n of nodes) {
+         colors[n.id] = 'WHITE';
+@@ -25,33 +28,56 @@
+ 
+     const stack = [];
+ 
+-    function* dfsVisit(u) {
++    function* dfsVisit(u, p = null) {
++        // Line 0: function called
++        yield { type: 'SET_LINE', lineIndex: 0 };
++
+         stack.push(u);
+-        yield { type: 'DS_UPDATE', data: [...stack], action: 'push', node: u, internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
++        yield { type: 'DS_UPDATE', data: [...stack], action: 'push', node: u };
++
++        // Visited update
++        yield { type: 'UPDATE_VISITED', nodeId: u };
++        if (p) yield { type: 'UPDATE_PARENT', childId: u, parentId: p };
+ 
+         colors[u] = 'GRAY';
+         time++;
+         discoveryTime[u] = time;
+-        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#fbbf24', internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
+-        yield { type: 'LOG', message: `Discovered ${nodes.find(n => n.id === u)?.label}`, internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
++        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#fbbf24' };
++        yield { type: 'LOG', message: `Discovered ${nodes.find(n => n.id === u)?.label}` };
++
++        // Line 1: mark u as Visited (Gray)
++        yield { type: 'SET_LINE', lineIndex: 1 };
+ 
+         const neighbors = adjMap[u] || [];
++
++        // Line 2: for each neighbor
++        yield { type: 'SET_LINE', lineIndex: 2 };
++
+         for (const edge of neighbors) {
+             const v = edge.to;
+             const edgeId = edge.id;
+ 
++            // Line 3: if v is Unvisited
++            yield { type: 'SET_LINE', lineIndex: 3 };
++
+             if (colors[v] === 'WHITE') {
+-                parents[v] = u; // Track parent
+-                yield { type: 'CLASSIFY_EDGE', edgeId, classification: 'tree', internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
+-                yield* dfsVisit(v);
++                yield { type: 'CLASSIFY_EDGE', edgeId, classification: 'tree' };
++                // Line 4: DFS(v)
++                yield { type: 'SET_LINE', lineIndex: 4 };
++                yield* dfsVisit(v, u);
++
++                // Return to loop (Line 2)
++                yield { type: 'SET_LINE', lineIndex: 2 };
++
+             } else if (colors[v] === 'GRAY') {
+-                yield { type: 'ADD_BACK_EDGE', edgeId: edgeId, source: u, target: v, classification: 'back', internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
+-                yield { type: 'LOG', message: `Back-edge detected: ${nodes.find(n => n.id === u)?.label} -> ${nodes.find(n => n.id === v)?.label}`, internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
++                // Back-edge found: yield specific action for Result Tree
++                yield { type: 'ADD_BACK_EDGE', edgeId: edgeId, source: u, target: v, classification: 'back' };
++                yield { type: 'LOG', message: `Back-edge detected: ${nodes.find(n => n.id === u)?.label} -> ${nodes.find(n => n.id === v)?.label}` };
+             } else if (colors[v] === 'BLACK') {
+                 if (discoveryTime[u] < discoveryTime[v]) {
+-                    yield { type: 'CLASSIFY_EDGE', edgeId, classification: 'forward', internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
++                    yield { type: 'CLASSIFY_EDGE', edgeId, classification: 'forward' };
+                 } else {
+-                    yield { type: 'CLASSIFY_EDGE', edgeId, classification: 'cross', internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
++                    yield { type: 'CLASSIFY_EDGE', edgeId, classification: 'cross' };
+                 }
+             }
+         }
+@@ -59,14 +85,18 @@
+         colors[u] = 'BLACK';
+         time++;
+         finishTime[u] = time;
+-        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6', internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
++        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6' };
++
++        // Line 5: mark u as Finished (Black)
++        yield { type: 'SET_LINE', lineIndex: 5 };
+ 
+         stack.pop();
+-        yield { type: 'DS_UPDATE', data: [...stack], action: 'pop', internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
+-    }
+-
+-    if (startNodeId !== undefined && startNodeId !== null) yield* dfsVisit(startNodeId);
+-    yield { type: 'LOG', message: 'DFS Completed', internalState: { visited: Object.keys(discoveryTime), distances: discoveryTime, parents: { ...parents }, queue: [...stack] } };
++        yield { type: 'DS_UPDATE', data: [...stack], action: 'pop' };
++    }
++
++    if (startNodeId) yield* dfsVisit(startNodeId);
++    yield { type: 'LOG', message: 'DFS Completed' };
++    yield { type: 'SET_LINE', lineIndex: -1 };
+ }
+ 
+ export function* bfs(nodes, edges, startNodeId) {
+@@ -80,50 +110,87 @@
+     });
+ 
+     const colors = {};
+-    const parents = {};
+     const queue = [];
++
++    // Line 0: function BFS(start)
++    yield { type: 'SET_LINE', lineIndex: 0 };
+ 
+     for (const n of nodes) {
+         colors[n.id] = 'WHITE';
+         yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
+     }
+ 
+-    if (startNodeId === undefined || startNodeId === null) return;
++    if (!startNodeId) return;
++
++    // Line 1: create queue Q, enqueue start
++    yield { type: 'SET_LINE', lineIndex: 1 };
+ 
+     colors[startNodeId] = 'GRAY';
+     queue.push(startNodeId);
+-    yield { type: 'DS_UPDATE', data: [...queue], action: 'push', node: startNodeId, internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
+-    yield { type: 'SET_NODE_COLOR', nodeId: startNodeId, color: '#fbbf24', internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
++    yield { type: 'DS_UPDATE', data: [...queue], action: 'push', node: startNodeId };
++    yield { type: 'SET_NODE_COLOR', nodeId: startNodeId, color: '#fbbf24' };
++    yield { type: 'UPDATE_VISITED', nodeId: startNodeId };
++
++    // Line 2: mark start as Visited
++    yield { type: 'SET_LINE', lineIndex: 2 };
++
++    // Line 3: while Q is not empty
++    yield { type: 'SET_LINE', lineIndex: 3 };
+ 
+     while (queue.length > 0) {
+         const u = queue.shift();
+-        yield { type: 'DS_UPDATE', data: [...queue], action: 'pop', node: u, internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
++        yield { type: 'DS_UPDATE', data: [...queue], action: 'pop', node: u };
++
++        // Line 4: u = Q.dequeue()
++        yield { type: 'SET_LINE', lineIndex: 4 };
+ 
+         const neighbors = adjMap[u] || [];
++
++        // Line 5: for each neighbor v
++        yield { type: 'SET_LINE', lineIndex: 5 };
+ 
+         for (const edge of neighbors) {
+             const v = edge.to;
++
++            // Line 6: if v is Unvisited
++            yield { type: 'SET_LINE', lineIndex: 6 };
++
+             if (colors[v] === 'WHITE') {
+                 colors[v] = 'GRAY';
+-                parents[v] = u; // Track parent
+                 queue.push(v);
+-                yield { type: 'DS_UPDATE', data: [...queue], action: 'push', node: v, internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
+-                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree', internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
+-                yield { type: 'SET_NODE_COLOR', nodeId: v, color: '#fbbf24', internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
++                yield { type: 'UPDATE_VISITED', nodeId: v };
++                yield { type: 'UPDATE_PARENT', childId: v, parentId: u };
++
++                // Line 7: mark v as Visited
++                yield { type: 'SET_LINE', lineIndex: 7 };
++
++                yield { type: 'DS_UPDATE', data: [...queue], action: 'push', node: v };
++                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' };
++                yield { type: 'SET_NODE_COLOR', nodeId: v, color: '#fbbf24' };
++
++                // Line 8: Q.enqueue(v)
++                yield { type: 'SET_LINE', lineIndex: 8 };
++
+             } else {
+                 if (colors[v] === 'GRAY') {
+-                    yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'back', internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
++                    yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'back' };
+                 } else {
+-                    yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'cross', internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
++                    yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'cross' };
+                 }
+             }
+-        }
++            // Loop back to Line 5? Or just implied
++            yield { type: 'SET_LINE', lineIndex: 5 };
++        }
++
+         colors[u] = 'BLACK';
+-        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6', internalState: { visited: Object.keys(colors).filter(k => colors[k] !== 'WHITE'), distances: {}, parents: { ...parents }, queue: [...queue] } };
+-    }
++        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6' };
++
++        // Loop back to Line 3 (while)
++    }
++    yield { type: 'SET_LINE', lineIndex: -1 };
+ }
+ 
+-export function* dijkstra(nodes, edges, startNodeId, targetNodeId) {
++export function* dijkstra(nodes, edges, startNodeId) {
+     const adjMap = {};
+     nodes.forEach(n => adjMap[n.id] = []);
+     edges.forEach(e => {
+@@ -137,80 +204,94 @@
+     const prev = {};
+     const pq = [];
+ 
++    // Line 0
++    yield { type: 'SET_LINE', lineIndex: 0 };
++
+     for (const n of nodes) {
+         dist[n.id] = Infinity;
+         prev[n.id] = null;
+         yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
+     }
+ 
+-    if (startNodeId === undefined || startNodeId === null) return;
+-
+-    const visited = [];
++    if (!startNodeId) return;
+ 
+     dist[startNodeId] = 0;
+     pq.push({ id: startNodeId, d: 0 });
+-    yield { type: 'DS_UPDATE', data: [...pq], action: 'push', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
+-    yield { type: 'SET_NODE_COLOR', nodeId: startNodeId, color: '#fbbf24', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
++    yield { type: 'DS_UPDATE', data: [...pq], action: 'push' };
++    yield { type: 'SET_NODE_COLOR', nodeId: startNodeId, color: '#fbbf24' };
++    yield { type: 'UPDATE_VISITED', nodeId: startNodeId };
++
++    // Line 1: dist[start]=0, Q.push
++    yield { type: 'SET_LINE', lineIndex: 1 };
++
++    // Line 2: while Q not empty
++    yield { type: 'SET_LINE', lineIndex: 2 };
+ 
+     while (pq.length > 0) {
+         pq.sort((a, b) => a.d - b.d);
+-        yield { type: 'DS_UPDATE', data: [...pq], action: 'update', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
++        yield { type: 'DS_UPDATE', data: [...pq], action: 'update' };
+ 
+         const { id: u, d: uDist } = pq.shift();
+-        yield { type: 'DS_UPDATE', data: [...pq], action: 'pop', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
++        yield { type: 'DS_UPDATE', data: [...pq], action: 'pop' };
++
++        // Line 3: u = Q.extractMin()
++        yield { type: 'SET_LINE', lineIndex: 3 };
+ 
+         if (uDist > dist[u]) continue;
+ 
+-        visited.push(u);
+-
+-        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
+-        yield { type: 'LOG', message: `Processing ${nodes.find(n => n.id === u)?.label} (dist: ${uDist})`, internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
+-
+-        // Check for Target
+-        if (targetNodeId !== undefined && targetNodeId !== null && u === targetNodeId) {
+-            yield { type: 'LOG', message: `Target Reached! Distance: ${uDist}`, internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
+-
+-            // Backtrack to highlight path
+-            let curr = targetNodeId;
+-            while (curr !== null) {
+-                yield { type: 'SET_NODE_COLOR', nodeId: curr, color: '#22c55e', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } }; // Green
+-
+-                const p = prev[curr];
+-                if (p !== null) {
+-                    const edge = adjMap[p].find(e => e.to === curr);
+-                    if (edge) {
+-                        yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'solution', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
+-                    }
+-                }
+-                curr = p;
+-            }
+-            return; // Stop algorithm
+-        }
+-
+-        if (prev[u] !== null) {
+-            const parentId = prev[u];
+-            const edge = adjMap[parentId].find(e => e.to === u);
++        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6' };
++        yield { type: 'LOG', message: `Processing ${nodes.find(n => n.id === u)?.label} (dist: ${uDist})` };
++
++        if (prev[u]) {
++            const parent = prev[u];
++            const edge = adjMap[parent].find(e => e.to === u);
+             if (edge) {
+-                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
++                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' };
+             }
+         }
+ 
+         const neighbors = adjMap[u] || [];
++
++        // Line 4: for each neighbor
++        yield { type: 'SET_LINE', lineIndex: 4 };
++
+         for (const edge of neighbors) {
+             const v = edge.to;
+-            const weight = edge.weight;
++            const weight = Number(edge.weight); // Ensure number
++
++            // Line 5: alt = dist + w
++            yield { type: 'SET_LINE', lineIndex: 5 };
++
++            // Line 6: if alt < dist[v]
++            yield { type: 'SET_LINE', lineIndex: 6 };
+ 
+             if (dist[u] + weight < dist[v]) {
+                 dist[v] = dist[u] + weight;
++
++                // Line 7: dist[v] = alt
++                yield { type: 'SET_LINE', lineIndex: 7 };
++
+                 prev[v] = u;
+                 pq.push({ id: v, d: dist[v] });
+-                yield { type: 'DS_UPDATE', data: [...pq], action: 'push', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
+-
+-                yield { type: 'SET_NODE_COLOR', nodeId: v, color: '#fbbf24', internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
+-                yield { type: 'LOG', message: `Relaxed ${nodes.find(n => n.id === v)?.label} : ${dist[v]}`, internalState: { visited: [...visited], distances: { ...dist }, parents: { ...prev }, queue: [...pq] } };
+-            }
+-        }
+-    }
++
++                yield { type: 'UPDATE_VISITED', nodeId: v };
++                yield { type: 'UPDATE_PARENT', childId: v, parentId: u };
++
++                yield { type: 'DS_UPDATE', data: [...pq], action: 'push' };
++
++                yield { type: 'SET_NODE_COLOR', nodeId: v, color: '#fbbf24' };
++                yield { type: 'LOG', message: `Relaxed ${nodes.find(n => n.id === v)?.label} : ${dist[v]}` };
++
++                // Line 8: Q.decreaseKey
++                yield { type: 'SET_LINE', lineIndex: 8 };
++            }
++            // Loop Line 4
++            yield { type: 'SET_LINE', lineIndex: 4 };
++        }
++        // Loop Line 2
++        yield { type: 'SET_LINE', lineIndex: 2 };
++    }
++    yield { type: 'SET_LINE', lineIndex: -1 };
+ }
+ 
+ export function* prim(nodes, edges, startNodeId) {
+@@ -228,51 +309,92 @@
+     const inMST = {};
+     const pq = [];
+ 
++    // Line 0
++    yield { type: 'SET_LINE', lineIndex: 0 };
++
+     for (const n of nodes) {
+         key[n.id] = Infinity;
+         inMST[n.id] = false;
+         yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
+     }
+ 
+-    if (startNodeId === undefined || startNodeId === null) startNodeId = nodes[0]?.id;
+-    if (startNodeId === undefined || startNodeId === null) return;
++    if (!startNodeId) startNodeId = nodes[0]?.id;
++    if (!startNodeId) return;
+ 
+     key[startNodeId] = 0;
+     pq.push({ id: startNodeId, k: 0 });
+-    const visited = [];
+-    yield { type: 'DS_UPDATE', data: [...pq], action: 'push', internalState: { visited: [...visited], distances: { ...key }, parents: { ...parent }, queue: [...pq] } };
++    yield { type: 'DS_UPDATE', data: [...pq], action: 'push' };
++    yield { type: 'UPDATE_VISITED', nodeId: startNodeId };
++
++    // Line 1: key[start]=0, Q.push
++    yield { type: 'SET_LINE', lineIndex: 1 };
++
++    // Line 2: while Q not empty
++    yield { type: 'SET_LINE', lineIndex: 2 };
+ 
+     while (pq.length > 0) {
+         pq.sort((a, b) => a.k - b.k);
+-        yield { type: 'DS_UPDATE', data: [...pq], action: 'update', internalState: { visited: [...visited], distances: { ...key }, parents: { ...parent }, queue: [...pq] } };
++        yield { type: 'DS_UPDATE', data: [...pq], action: 'update' };
+ 
+         const { id: u } = pq.shift();
+-        yield { type: 'DS_UPDATE', data: [...pq], action: 'pop', internalState: { visited: [...visited], distances: { ...key }, parents: { ...parent }, queue: [...pq] } };
++        yield { type: 'DS_UPDATE', data: [...pq], action: 'pop' };
++
++        // Line 3: u = Q.extractMin
++        yield { type: 'SET_LINE', lineIndex: 3 };
+ 
+         if (inMST[u]) continue;
+         inMST[u] = true;
+-        visited.push(u);
+-        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6', internalState: { visited: [...visited], distances: { ...key }, parents: { ...parent }, queue: [...pq] } };
++
++        // Line 4: add u to MST
++        yield { type: 'SET_LINE', lineIndex: 4 };
++
++        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6' };
+ 
+         if (parent[u]) {
+             const p = parent[u];
+             const edge = adjMap[p].find(e => e.to === u);
+-            if (edge) yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree', internalState: { visited: [...visited], distances: { ...key }, parents: { ...parent }, queue: [...pq] } };
++            if (edge) yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' };
+         }
+ 
+         const neighbors = adjMap[u] || [];
++
++        // Line 5: for each neighbor
++        yield { type: 'SET_LINE', lineIndex: 5 };
++
+         for (const edge of neighbors) {
+             const v = edge.to;
+-            const weight = edge.weight;
++            const weight = Number(edge.weight);
++
++            // Line 6: if v not in MST and w < key
++            yield { type: 'SET_LINE', lineIndex: 6 };
++
+             if (!inMST[v] && weight < key[v]) {
+                 key[v] = weight;
+                 parent[v] = u;
++
++                // Line 7: parent[v] = u
++                yield { type: 'SET_LINE', lineIndex: 7 };
++
++                // Line 8: key[v] = w
++                yield { type: 'SET_LINE', lineIndex: 8 };
++
+                 pq.push({ id: v, k: weight });
+-                yield { type: 'DS_UPDATE', data: [...pq], action: 'push', internalState: { visited: [...visited], distances: { ...key }, parents: { ...parent }, queue: [...pq] } };
+-                yield { type: 'SET_NODE_COLOR', nodeId: v, color: '#fbbf24', internalState: { visited: [...visited], distances: { ...key }, parents: { ...parent }, queue: [...pq] } };
+-            }
+-        }
+-    }
++                yield { type: 'UPDATE_VISITED', nodeId: v };
++                yield { type: 'UPDATE_PARENT', childId: v, parentId: u };
++
++                yield { type: 'DS_UPDATE', data: [...pq], action: 'push' };
++                yield { type: 'SET_NODE_COLOR', nodeId: v, color: '#fbbf24' };
++
++                // Line 9: Q.decreaseKey
++                yield { type: 'SET_LINE', lineIndex: 9 };
++            }
++            // Loop Line 5
++            yield { type: 'SET_LINE', lineIndex: 5 };
++        }
++        // Loop Line 2
++        yield { type: 'SET_LINE', lineIndex: 2 };
++    }
++    yield { type: 'SET_LINE', lineIndex: -1 };
+ }
+ 
+ export function* kruskal(nodes, edges) {
+@@ -296,333 +418,483 @@
+         return false;
+     }
+ 
+-    // Visualization State
+-    const internalState = {
+-        disjointSet: { ...parent }
+-    };
++    // Line 0
++    yield { type: 'SET_LINE', lineIndex: 0 };
+ 
+     for (const n of nodes) {
+         yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
+     }
+ 
+-    // Initial State update
+-    yield { type: 'LOG', message: 'Kruskal Started', internalState: { ...internalState } };
++    // Line 1: Sort edges
++    yield { type: 'SET_LINE', lineIndex: 1 };
++
++    // Line 2: For each edge
++    yield { type: 'SET_LINE', lineIndex: 2 };
+ 
+     for (const edge of sortedEdges) {
+-        yield { type: 'LOG', message: `Checking edge (${edge.weight})`, internalState: { ...internalState } };
++        yield { type: 'LOG', message: `Checking edge (${edge.weight})` };
++
++        // Line 3: if find(u) != find(v)
++        yield { type: 'SET_LINE', lineIndex: 3 };
+ 
+         if (union(edge.source, edge.target)) {
+-            internalState.disjointSet = { ...parent }; // Update disjoint set
+-            yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree', internalState: { ...internalState } };
+-            yield { type: 'LOG', message: `Added to MST`, internalState: { ...internalState } };
++            // Line 4: union(u, v)
++            yield { type: 'SET_LINE', lineIndex: 4 };
++
++            yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' };
++            yield { type: 'LOG', message: `Added to MST` };
++
++            // Kruskal doesn't use "Visited" in same way, but we could mark nodes as visited when added to MST set?
++            // User asked for "Parent" and "Visited".
++            // For Kruskal, Parent usually refers to Disjoint Set parent (which changes), or MST tree parent?
++            // Displaying Disjoint Set parent is cool.
++            // Let's emit UPDATE_PARENT for the union op?
++            // Actually, `parent` in DS is structural.
++            // Let's just track connected nodes as "Visited".
++            yield { type: 'UPDATE_VISITED', nodeId: edge.source };
++            yield { type: 'UPDATE_VISITED', nodeId: edge.target };
++
++            // Line 5: add edge to MST
++            yield { type: 'SET_LINE', lineIndex: 5 };
++
+         } else {
+-            yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'back', internalState: { ...internalState } };
+-            yield { type: 'LOG', message: `Cycle detected - Discarded`, internalState: { ...internalState } };
+-        }
+-    }
+-
+-    yield { type: 'LOG', message: 'Kruskal Completed', internalState: { ...internalState } };
++            yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'back' };
++            yield { type: 'LOG', message: `Cycle detected - Discarded` };
++        }
++        // Loop Line 2
++        yield { type: 'SET_LINE', lineIndex: 2 };
++    }
++
++    yield { type: 'SET_LINE', lineIndex: -1 };
+ }
+ 
+-export function* scc(nodes, edges) {
+-    const adjMap = {};
+-    nodes.forEach(n => adjMap[n.id] = []);
++export function* scc(nodes, edges, startNodeId) {
++    // Adjacency list
++    const adj = {};
++    nodes.forEach(n => adj[n.id] = []);
+     edges.forEach(e => {
+-        adjMap[e.source].push({ to: e.target, id: e.id });
+-        // SCC is strictly for directed graphs mostly, but works on undirected as components
+-        if (e.type === 'undirected') {
+-            adjMap[e.target].push({ to: e.source, id: e.id });
+-        }
++        adj[e.source].push({ target: e.target, weight: e.weight || 0, id: e.id });
+     });
+ 
+     const ids = {};
+     const low = {};
+     const onStack = {};
+     const stack = [];
+-    const visited = new Set();
++    const visited = {}; // Standard visited tracking using context
++
+     let idCounter = 0;
+-    const sccCount = 0;
+-    const sccs = [];
+-
+-    // Visualization State
+-    const internalState = {
+-        stack: [],
+-        lowLink: {},
+-        ids: {},
+-        visited: []
+-    };
+-
+-    for (const n of nodes) {
+-        ids[n.id] = -1;
+-        low[n.id] = -1;
+-        onStack[n.id] = false;
+-        yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
+-    }
+-
++
++    // Helper generator for DFS
+     function* dfs(at) {
+         stack.push(at);
+         onStack[at] = true;
+         ids[at] = low[at] = idCounter++;
+-        visited.add(at);
+-
+-        internalState.stack = [...stack];
+-        internalState.lowLink = { ...low };
+-        internalState.ids = { ...ids };
+-        internalState.visited = [...visited];
+-
+-        yield { type: 'DS_UPDATE', data: [...stack], action: 'push', node: at, internalState: { ...internalState } };
+-        yield { type: 'SET_NODE_COLOR', nodeId: at, color: '#fbbf24', internalState: { ...internalState } }; // Visiting
+-        yield { type: 'LOG', message: `Visited ${nodes.find(n => n.id === at)?.label}. ID: ${ids[at]}, Low: ${low[at]}`, internalState: { ...internalState } };
+-
+-        const neighbors = adjMap[at] || [];
++        visited[at] = true;
++
++        // Line 1: ids[u], low[u] = time++, stack.push(u)
++        yield { type: 'SET_LINE', lineIndex: 1 };
++        yield { type: 'UPDATE_VISITED', nodeId: at };
++        yield { type: 'SET_NODE_COLOR', nodeId: at, color: '#fbbf24' }; // Visiting (Yellow)
++        yield { type: 'DS_UPDATE', data: [...stack], action: 'replace' }; // Show stack
++
++        // Line 2: onStack[u] = true
++        yield { type: 'SET_LINE', lineIndex: 2 };
++
++        const neighbors = adj[at];
++        // Line 3: for each neighbor v
++        yield { type: 'SET_LINE', lineIndex: 3 };
++
+         for (const edge of neighbors) {
+-            const to = edge.to;
+-            if (ids[to] === -1) {
++            const to = edge.target;
++
++            // Line 4: if not visited[v]
++            yield { type: 'SET_LINE', lineIndex: 4 };
++
++            if (ids[to] === undefined) {
++                yield { type: 'UPDATE_PARENT', childId: to, parentId: at };
++
++                // Line 5: TarjanSCC(v)
++                yield { type: 'SET_LINE', lineIndex: 5 };
+                 yield* dfs(to);
++
++                // Line 6: low[u] = min(low[u], low[v])
++                yield { type: 'SET_LINE', lineIndex: 6 };
+                 low[at] = Math.min(low[at], low[to]);
+-                internalState.lowLink = { ...low };
+-                yield { type: 'LOG', message: `Updated Low-Link for ${nodes.find(n => n.id === at)?.label} to ${low[at]}`, internalState: { ...internalState } };
++
+             } else if (onStack[to]) {
++                // Line 7: else if onStack[v]
++                yield { type: 'SET_LINE', lineIndex: 7 };
++
++                // Line 8: low[u] = min(low[u], ids[v])
++                yield { type: 'SET_LINE', lineIndex: 8 };
+                 low[at] = Math.min(low[at], ids[to]);
+-                internalState.lowLink = { ...low };
+-                yield { type: 'LOG', message: `Back-edge to ${nodes.find(n => n.id === to)?.label}. Updated Low: ${low[at]}`, internalState: { ...internalState } };
+-            }
+-        }
++            }
++            // Loop Line 3
++            yield { type: 'SET_LINE', lineIndex: 3 };
++        }
++
++        // Line 9: if ids[u] == low[u]
++        yield { type: 'SET_LINE', lineIndex: 9 };
+ 
+         if (ids[at] === low[at]) {
+-            const currentSCC = [];
+-            while (stack.length > 0) {
+-                const node = stack.pop();
++            // Line 10: pop from stack until u
++            yield { type: 'SET_LINE', lineIndex: 10 };
++
++            const component = [];
++            let node;
++            do {
++                node = stack.pop();
+                 onStack[node] = false;
+-                currentSCC.push(node);
+-                yield { type: 'SET_NODE_COLOR', nodeId: node, color: '#22c55e', internalState: { ...internalState, stack: [...stack] } }; // Found SCC
+-                if (node === at) break;
+-            }
+-            sccs.push(currentSCC);
+-            yield { type: 'DS_UPDATE', data: [...stack], action: 'pop', internalState: { ...internalState, stack: [...stack] } };
+-            yield { type: 'LOG', message: `SCC Found: [${currentSCC.map(id => nodes.find(n => n.id === id)?.label).join(', ')}]`, internalState: { ...internalState, stack: [...stack] } };
+-        }
+-    }
+-
+-    for (const n of nodes) {
+-        if (ids[n.id] === -1) {
+-            yield* dfs(n.id);
+-        }
+-    }
+-
+-    // Generate Condensation Graph Data
+-    // We treat each SCC as a super node.
+-    // Edges between super nodes exist if there is an edge between any node in SCC A to any node in SCC B.
+-    yield {
+-        type: 'SET_RESULT_DATA',
+-        data: {
+-            type: 'scc',
+-            sccs: sccs,
+-            originalGraph: { nodes, edges }
+-        }
+-    };
+-
+-    yield { type: 'LOG', message: `Tarjan's SCC Completed. Found ${sccs.length} components.` };
++                component.push(node);
++                yield { type: 'SET_NODE_COLOR', nodeId: node, color: '#3b82f6' }; // Finished (Blue)
++            } while (node !== at);
++
++            yield { type: 'DS_UPDATE', data: [...stack], action: 'replace' };
++            yield { type: 'FOUND_COMPONENT', component: component };
++            yield { type: 'LOG', message: `Found SCC: ${component.length} nodes` };
++        }
++    }
++
++    // Line 0: function TarjanSCC(u)
++    yield { type: 'SET_LINE', lineIndex: 0 };
++    yield { type: 'LOG', message: "Tarjan's SCC Started" };
++
++    // Run DFS on all nodes (to cover disconnected components)
++    // Note: Tarjan's typically iterates all nodes 1..V
++    for (const node of nodes) {
++        if (ids[node.id] === undefined) {
++            // If we want to visualize the outer loop, maybe set a line?
++            // But pseudocode function is TarjanSCC(u).
++            // Let's just call it.
++            yield* dfs(node.id);
++        }
++    }
++
++    yield { type: 'SET_LINE', lineIndex: -1 };
++    yield { type: 'LOG', message: "SCC Completed" };
+ }
+ 
+-export function* articulationPoints(nodes, edges) {
+-    const adjMap = {};
+-    nodes.forEach(n => adjMap[n.id] = []);
+-    edges.forEach(e => {
+-        adjMap[e.source].push(e.target);
+-        adjMap[e.target].push(e.source); // Undirected for AP
++export function* distanceVector(nodes, edges) {
++    // Distance Vector / Bellman-Ford Simulation
++    // Since we want to visualize the *table* updates, we'll iterate through all nodes.
++    // Let N = nodes.length. We run N-1 iterations.
++
++    const dist = {}; // { nodeId: { destId: { dist: number, nextHop: nodeId } } }
++
++    // Initialize
++    nodes.forEach(u => {
++        dist[u.id] = {};
++        nodes.forEach(v => {
++            if (u.id === v.id) {
++                dist[u.id][v.id] = { dist: 0, nextHop: u.id };
++            } else {
++                dist[u.id][v.id] = { dist: Infinity, nextHop: null };
++            }
++        });
+     });
+ 
+-    const discovery = {};
+-    const low = {};
+-    const parent = {};
+-    const ap = new Set();
+-    const visited = new Set();
+-    let time = 0;
+-
+-    // Visualization State
+-    const internalState = {
+-        lowLink: {},
+-        discovery: {},
+-        visited: [],
+-        ap: [] // List of current APs
+-    };
+-
+-    for (const n of nodes) {
+-        discovery[n.id] = -1;
+-        low[n.id] = -1;
+-        parent[n.id] = null;
+-        yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
+-    }
+-
+-    function* dfs(u) {
+-        let children = 0;
+-        time++;
+-        discovery[u] = low[u] = time;
+-        visited.add(u);
+-
+-        internalState.discovery = { ...discovery };
+-        internalState.lowLink = { ...low };
+-        internalState.visited = [...visited];
+-
+-        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#fbbf24', internalState: { ...internalState } };
+-        yield { type: 'LOG', message: `Visited ${nodes.find(n => n.id === u)?.label}`, internalState: { ...internalState } };
+-
+-        const neighbors = adjMap[u] || [];
+-        for (const v of neighbors) {
+-            if (v === parent[u]) continue;
+-
+-            if (visited.has(v)) {
+-                low[u] = Math.min(low[u], discovery[v]);
+-                internalState.lowLink = { ...low };
+-                yield { type: 'LOG', message: `Back-edge to ${nodes.find(n => n.id === v)?.label}. Low: ${low[u]}`, internalState: { ...internalState } };
+-            } else {
+-                children++;
+-                parent[v] = u;
+-                yield* dfs(v);
+-
+-                low[u] = Math.min(low[u], low[v]);
+-                internalState.lowLink = { ...low };
+-
+-                if (parent[u] !== null && low[v] >= discovery[u]) {
+-                    ap.add(u);
+-                    internalState.ap = [...ap];
+-                    yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#f97316', internalState: { ...internalState } }; // Orange for AP
+-                    yield { type: 'LOG', message: `Articulation Point found: ${nodes.find(n => n.id === u)?.label}`, internalState: { ...internalState } };
++    // Helper to emit table update
++    function* emitTableUpdate() {
++        // We need to clone the structure for state immutability in store
++        const tableCopy = JSON.parse(JSON.stringify(dist));
++        yield { type: 'DS_UPDATE_ROUTING_TABLE', table: tableCopy };
++    }
++
++    // Line 0: Initialization
++    yield { type: 'SET_LINE', lineIndex: 0 };
++    yield* emitTableUpdate();
++    yield { type: 'LOG', message: "Initialized Routing Tables" };
++
++    let changed = true;
++    let iterations = 0;
++    const MAX_ITERATIONS = nodes.length + 2; // Safety + negative cycle check space
++
++    // Line 1: Loop until no changes or max iterations
++    yield { type: 'SET_LINE', lineIndex: 1 };
++
++    while (changed && iterations < MAX_ITERATIONS) {
++        changed = false;
++        iterations++;
++        yield { type: 'LOG', message: `Iteration ${iterations} Started` };
++
++        // For each node u (Parallel simulate by processing all edges relative to u)
++        // Actually, DVR is usually: each node sends vector to neighbors. Neighbors update.
++        // Let's iterate edges: for each edge (u, v) with weight w:
++        //    if dist(u, dest) > w + dist(v, dest), update.
++        // We do this for ALL destinations.
++
++        // Line 2: Relax all edges
++        yield { type: 'SET_LINE', lineIndex: 2 };
++
++        for (const edge of edges) {
++            const u = edge.source;
++            const v = edge.target;
++            const w = Number(edge.weight);
++
++            // Check updates from u -> v and v -> u (if undirected)
++
++            // 1. Update u's table based on v's table
++            for (const dest of nodes) {
++                const destId = dest.id;
++                // If v has a path to dest
++                if (dist[v][destId].dist !== Infinity) {
++                    const newDist = w + dist[v][destId].dist;
++                    if (newDist < dist[u][destId].dist) {
++                        dist[u][destId] = { dist: newDist, nextHop: v };
++                        changed = true;
++                        yield { type: 'SET_ACTIVE_TABLE_NODE', nodeId: u };
++                        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#fbbf24' }; // Highlight updating node
++                        yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' }; // Highlight used edge
++                        yield { type: 'LOG', message: `Node ${nodes.find(n => n.id === u)?.label} updates dist to ${dest.label}: ${newDist} (via ${nodes.find(n => n.id === v)?.label})` };
++                        yield* emitTableUpdate();
++                    }
+                 }
+             }
+-        }
+-
+-        if (parent[u] === null && children > 1) {
+-            ap.add(u);
+-            internalState.ap = [...ap];
+-            yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#f97316', internalState: { ...internalState } };
+-            yield { type: 'LOG', message: `Root Articulation Point: ${nodes.find(n => n.id === u)?.label}`, internalState: { ...internalState } };
+-        }
+-
+-        // If not AP, set to processed color
+-        if (!ap.has(u)) {
+-            yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6', internalState: { ...internalState } };
+-        }
+-    }
+-
+-    for (const n of nodes) {
+-        if (!visited.has(n.id)) {
+-            yield* dfs(n.id);
+-        }
+-    }
+-
+-    // Calculate components for each AP (Conceptual Sub-Canvases)
+-    // For visualization, we will just pass the AP list and let the component handle the "what if removed" logic or just list them.
+-    // The requirement says: "Show the independent components that would be formed if that specific node were removed."
+-    // We can compute this now or in the view. Computing it here is safer for "Result Result".
+-
+-    yield {
+-        type: 'SET_RESULT_DATA',
+-        data: {
+-            type: 'ap',
+-            points: [...ap],
+-            originalGraph: { nodes, edges }
+-        }
+-    };
+-
+-    yield { type: 'LOG', message: `AP Discovery Completed. Found ${ap.size} points.` };
++
++            // 2. If undirected, update v's table based on u's table
++            if (edge.type === 'undirected' || !edge.type) { // Assuming global 'isDirected' handles this? 
++                // Wait, edges have type? The visualizer usually sets this.
++                // The algorithm receives `edges` which might just be raw data. 
++                // Usually we treat provided edges as directed if `isDirected` is true globally, but `edges` passed here *might* not have `type` set if strictly from graph context?
++                // Actually `edges` in context usually just have source/target.
++                // Let's assume we handle bi-direction if the graph is undirected.
++                // However, standard graph theory: if undirected, we have (u,v) and (v,u). 
++                // Our edge list usually only has one entry.
++                // Let's check `bfs` implementation: it builds `adjMap` handling undirected.
++                // We should probably do the same or check edge.type.
++
++                // Let's do the update for v -> u here explicitly if we assume undirected for now, 
++                // OR we can rely on standard "relax edges" approach where we iterate all directed edges.
++                // If the graph is undirected, we should interpret edge (u,v) as (u,v) and (v,u).
++
++                for (const dest of nodes) {
++                    const destId = dest.id;
++                    if (dist[u][destId].dist !== Infinity) {
++                        const newDist = w + dist[u][destId].dist;
++                        if (newDist < dist[v][destId].dist) {
++                            dist[v][destId] = { dist: newDist, nextHop: u };
++                            changed = true;
++                            yield { type: 'SET_ACTIVE_TABLE_NODE', nodeId: v };
++                            yield { type: 'SET_NODE_COLOR', nodeId: v, color: '#fbbf24' };
++                            yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' };
++                            yield { type: 'LOG', message: `Node ${nodes.find(n => n.id === v)?.label} updates dist to ${dest.label}: ${newDist} (via ${nodes.find(n => n.id === u)?.label})` };
++                            yield* emitTableUpdate();
++                        }
++                    }
++                }
++            }
++
++            // Yield after each edge processing to show animation step-by-step?
++            // Or maybe after a batch?
++            yield { type: 'SET_LINE', lineIndex: 2 };
++        }
++
++        // Clear highlights after iteration
++        // Clear highlights after iteration
++        for (const n of nodes) {
++            yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
++        }
++        for (const e of edges) {
++            yield { type: 'CLASSIFY_EDGE', edgeId: e.id, classification: undefined };
++        }
++    }
++
++
++    if (iterations >= 6) { // Using constant for now or use nodes.length + 2 if available
++        yield { type: 'LOG', message: "Negative Cycle Detected or Max Iterations Reached!" };
++    } else {
++        yield { type: 'LOG', message: `Converged in ${iterations} iterations.` };
++    }
++
++    yield { type: 'SET_ACTIVE_TABLE_NODE', nodeId: null };
++    yield { type: 'SET_LINE', lineIndex: -1 };
+ }
+ 
+-export function* floydWarshall(nodes, edges) {
+-    const adjMap = {};
+-    nodes.forEach(n => adjMap[n.id] = []);
+-    edges.forEach(e => {
+-        adjMap[e.source].push({ to: e.target, id: e.id, weight: e.weight });
+-        if (e.type === 'undirected') {
+-            adjMap[e.target].push({ to: e.source, id: e.id, weight: e.weight });
+-        }
++export function* linkState(nodes, edges) {
++    // Link State Routing: Flooding + Dijkstra (SPF)
++
++    const dist = {}; // Routing table state
++
++    // Initialize Tables
++    nodes.forEach(u => {
++        dist[u.id] = {};
++        nodes.forEach(v => {
++            dist[u.id][v.id] = { dist: Infinity, nextHop: null };
++            if (u.id === v.id) dist[u.id][v.id] = { dist: 0, nextHop: u.id };
++        });
+     });
+ 
+-    const dist = {};
+-    const next = {};
+-
+-    // Initialize matrices
+-    for (const u of nodes) {
+-        dist[u.id] = {};
+-        next[u.id] = {};
+-        for (const v of nodes) {
+-            if (u.id === v.id) {
+-                dist[u.id][v.id] = 0;
+-                next[u.id][v.id] = u.id;
+-            } else {
+-                dist[u.id][v.id] = Infinity;
+-                next[u.id][v.id] = null;
+-            }
+-        }
+-    }
+-
+-    // Add edges
+-    for (const e of edges) {
+-        const w = Number(e.weight) || 1;
+-        dist[e.source][e.target] = Math.min(dist[e.source][e.target], w);
+-        next[e.source][e.target] = e.target;
+-        if (e.type === 'undirected') {
+-            dist[e.target][e.source] = Math.min(dist[e.target][e.source], w);
+-            next[e.target][e.source] = e.source;
+-        }
+-    }
+-
+-    yield { type: 'LOG', message: `Floyd-Warshall Initialization Complete`, internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: null, i: null, j: null } } };
+-
+-    for (const k of nodes) {
+-        let updatedInK = false;
+-
+-        yield { type: 'SET_NODE_COLOR', nodeId: k.id, color: '#fbbf24', internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: k.id, i: null, j: null } } };
+-
+-        for (const i of nodes) {
+-            for (const j of nodes) {
+-                if (dist[i.id][k.id] !== Infinity && dist[k.id][j.id] !== Infinity && dist[i.id][j.id] > dist[i.id][k.id] + dist[k.id][j.id]) {
+-                    dist[i.id][j.id] = dist[i.id][k.id] + dist[k.id][j.id];
+-                    next[i.id][j.id] = next[i.id][k.id];
+-                    updatedInK = true;
+-                    yield {
+-                        type: 'LOG',
+-                        message: `Updated path: ${i.label} -> ${j.label} via ${k.label} (dist: ${dist[i.id][j.id]})`,
+-                        internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: k.id, i: i.id, j: j.id } }
+-                    };
++    function* emitTableUpdate() {
++        const tableCopy = JSON.parse(JSON.stringify(dist));
++        yield { type: 'DS_UPDATE_ROUTING_TABLE', table: tableCopy };
++    }
++
++    yield { type: 'SET_LINE', lineIndex: 0 }; // Start
++    yield* emitTableUpdate();
++    yield { type: 'LOG', message: "Initialized Link State Routing" };
++
++    // Phase 1: Flooding (Simulated)
++    // In real LSR, LSAs are flooded. Here we'll simulate each node "discovering" the full topology.
++    // Line 1: Flooding LSAs
++    yield { type: 'SET_LINE', lineIndex: 1 };
++    yield { type: 'LOG', message: "Phase 1: Flooding Link State Advertisements (LSAs)" };
++
++    // Animate "flooding" by highlighting edges in waves? 
++    // Or just iterate nodes and show them "broadcasting"
++
++    for (const node of nodes) {
++        yield { type: 'SET_NODE_COLOR', nodeId: node.id, color: '#fbbf24' }; // Broadcasting
++        yield { type: 'LOG', message: `Node ${node.label} floods LSA to neighbors` };
++
++        // Highlight outgoing edges
++        const outgoing = edges.filter(e => e.source === node.id || (e.type === 'undirected' && e.target === node.id));
++        for (const edge of outgoing) {
++            yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' }; // Using 'tree' for highlight color
++        }
++
++        // Wait a tick
++        yield { type: 'SET_LINE', lineIndex: 1 };
++
++        // Broadcast LSA to store
++        yield {
++            type: 'ADD_LSA',
++            lsa: {
++                sourceId: node.id,
++                links: outgoing.map(e => ({
++                    to: e.source === node.id ? e.target : e.source,
++                    weight: e.weight || 1
++                }))
++            }
++        };
++
++        // Reset colors
++        yield { type: 'SET_NODE_COLOR', nodeId: node.id, color: undefined };
++        for (const edge of outgoing) {
++            yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: undefined };
++        }
++    }
++
++    yield { type: 'LOG', message: "All nodes have full Link State Database (LSDB)" };
++
++    // Phase 2: SPF Calculation (Local Dijkstra for each node)
++    // Line 2: Compute SPF for each node
++    yield { type: 'SET_LINE', lineIndex: 2 };
++
++    // Re-use Dijkstra logic but locally? 
++    // We can just implement plain Dijkstra on the `nodes/edges` data since LSDB = Full Topology.
++
++    for (const source of nodes) {
++        yield { type: 'LOG', message: `Node ${source.label} running Dijkstra (SPF)...` };
++        yield { type: 'SET_ACTIVE_TABLE_NODE', nodeId: source.id };
++        // Clear previous visual state for the new SPF calculation
++        for (const n of nodes) yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
++        for (const e of edges) yield { type: 'CLASSIFY_EDGE', edgeId: e.id, classification: undefined };
++
++        yield { type: 'SET_NODE_COLOR', nodeId: source.id, color: '#8b5cf6' }; // Purple for calculating node
++
++        // Run Dijkstra for `source`
++        // Standard Dijkstra implementation
++        const d = {};
++        const next = {};
++        const parent = {};
++        const pq = [];
++
++        nodes.forEach(n => { d[n.id] = Infinity; next[n.id] = null; parent[n.id] = null; });
++        d[source.id] = 0;
++        pq.push({ id: source.id, cost: 0 });
++        yield { type: 'DS_UPDATE', data: [...pq], action: 'push' };
++
++        // Helper to find edge weight
++        const getWeight = (u, v) => {
++            const edge = edges.find(e =>
++                (e.source === u && e.target === v) ||
++                (e.type === 'undirected' && e.source === v && e.target === u) ||
++                (!e.type && e.source === v && e.target === u) // Assume undirected if type not set
++            );
++            return edge ? Number(edge.weight) : Infinity;
++        };
++
++        // Get Neighbors helper
++        const getNeighbors = (u) => {
++            const nbrs = [];
++            edges.forEach(e => {
++                if (e.source === u) nbrs.push(e.target);
++                else if (e.target === u && (e.type === 'undirected' || !e.type)) nbrs.push(e.source);
++            });
++            return nbrs;
++        };
++
++        while (pq.length > 0) {
++            pq.sort((a, b) => a.cost - b.cost);
++            const { id: u, cost: uCost } = pq.shift();
++            yield { type: 'DS_UPDATE', data: [...pq], action: 'pop' };
++
++            if (uCost > d[u]) continue;
++
++            if (u !== source.id) {
++                yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6' }; // Processed (Blue)
++                if (parent[u]) {
++                    const edge = edges.find(e =>
++                        (e.source === parent[u] && e.target === u) ||
++                        (e.type === 'undirected' && e.source === u && e.target === parent[u]) ||
++                        (!e.type && e.source === u && e.target === parent[u])
++                    );
++                    if (edge) yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' };
+                 }
+             }
+-        }
+-        if (!updatedInK) {
+-            yield {
+-                type: 'LOG',
+-                message: `Checked intermediate node ${k.label} (no shorter paths found)`,
+-                internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: k.id, i: null, j: null } }
++
++            const neighbors = getNeighbors(u);
++            for (const v of neighbors) {
++                const weight = getWeight(u, v);
++                if (d[u] + weight < d[v]) {
++                    d[v] = d[u] + weight;
++
++                    // Determine Next Hop
++                    // If u is source, then v is a direct neighbor, so next hop to v is v.
++                    // If u is not source, next hop to v is same as next hop to u.
++                    if (u === source.id) {
++                        next[v] = v;
++                    } else {
++                        next[v] = next[u];
++                    }
++                    parent[v] = u;
++
++                    pq.push({ id: v, cost: d[v] });
++                    yield { type: 'DS_UPDATE', data: [...pq], action: 'push' };
++
++                    yield { type: 'SET_NODE_COLOR', nodeId: v, color: '#fbbf24' }; // Enqueued/Discovered (Yellow)
++                }
++            }
++        }
++
++        // Update Global Table with Local Results
++        // dist[source.id][dest.id]
++        nodes.forEach(dest => {
++            dist[source.id][dest.id] = {
++                dist: d[dest.id],
++                nextHop: next[dest.id]
+             };
+-        }
+-
+-        yield { type: 'SET_NODE_COLOR', nodeId: k.id, color: '#3b82f6', internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: null, i: null, j: null } } };
+-    }
+-
+-    // Trace all shortest paths to highlight edges in ResultTree
+-    const usedEdges = new Set();
+-    for (const u of nodes) {
+-        for (const v of nodes) {
+-            if (u.id !== v.id && dist[u.id][v.id] !== Infinity) {
+-                let curr = u.id;
+-                while (curr !== v.id && curr !== null) {
+-                    const nxt = next[curr][v.id];
+-                    if (nxt === null) break;
+-
+-                    const edge = adjMap[curr]?.find(e => e.to === nxt);
+-                    if (edge) {
+-                        usedEdges.add(edge.id);
+-                    }
+-                    curr = nxt;
+-                }
+-            }
+-        }
+-    }
+-
+-    for (const edgeId of usedEdges) {
+-        yield { type: 'CLASSIFY_EDGE', edgeId, classification: 'solution', internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: null, i: null, j: null } } };
+-    }
+-
+-    yield { type: 'LOG', message: `Floyd-Warshall Completed`, internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: null, i: null, j: null } } };
++        });
++
++        yield* emitTableUpdate();
++        yield { type: 'SET_NODE_COLOR', nodeId: source.id, color: undefined };
++
++        // Small pause between nodes?
++        yield { type: 'SET_LINE', lineIndex: 2 };
++    }
++
++    yield { type: 'SET_ACTIVE_TABLE_NODE', nodeId: null };
++    yield { type: 'LOG', message: "Link State Routing Converged" };
++    yield { type: 'SET_LINE', lineIndex: -1 };
+ }
++
++export const algorithms = {
++    dfs,
++    bfs,
++    dijkstra,
++    prim,
++    kruskal,
++    scc,
++    distanceVector,
++    linkState
++};
+--- C:/Users/taksh/Desktop/sdp/src/store/useGraphStore.js
++++ C:/Users/taksh/Desktop/sdp_merge/AlgoCore/src/store/useGraphStore.js
+@@ -1,121 +1,21 @@
+ import { create } from 'zustand';
+ 
+ const useGraphStore = create((set) => ({
+-    // Graph State
+-    nodes: [],
+-    edges: [],
+-    isDirected: false,
+-    edgeSourceNode: null, // ID of the node selected as source for a new edge
+-
+     // Data Structure Tracking
+     activeDS: [],
+     dsAction: null, // 'push', 'pop', 'update', or null
+ 
+-    // Resultant Tree and Result Panel Enhancements
++    // Resultant Tree Enhancements
+     backEdges: [], // Array of edges { source, target, ... }
+-    resultLayout: {}, // Map of ID -> { x, y } for elements in the result panel
+ 
+-    // Graph Actions
+-    setNodes: (nodes) => set({ nodes }),
+-    setEdges: (edges) => set({ edges }),
+-    setIsDirected: (isDirected) => set({ isDirected }),
++    // Routing Table (for Distance Vector)
++    routingTable: {}, // { nodeId: { destId: { dist: number, nextHop: nodeId } } }
++    activeTableNodeId: null, // The ID of the node currently processing its routing table
+ 
+-    setEdgeSource: (nodeId) => set({ edgeSourceNode: nodeId }),
+-    clearEdgeSelection: () => set({ edgeSourceNode: null }),
++    // Link State Database (for LSR)
++    lsdb: [], // Array of LSAs
+ 
+-    startNodeId: null, // ID of the node selected as the start node for algorithms
+-    setStartNodeId: (id) => set({ startNodeId: id }),
+-
+-    targetNodeId: null, // ID of the destination node (for Dijkstra/A*)
+-    setTargetNodeId: (id) => set({ targetNodeId: id }),
+-
+-    addNode: (x, y) => set((state) => {
+-        // Find next integer ID
+-        const maxId = state.nodes.reduce((max, node) => Math.max(max, typeof node.id === 'number' ? node.id : -1), -1);
+-        const nextId = maxId + 1; // Start at 0 if empty
+-
+-        const newNode = {
+-            id: nextId, // Integer ID
+-            label: `${nextId}`, // Initial Label matches ID
+-            x,
+-            y,
+-            originalPos: { x, y },
+-            treePos: null,
+-        };
+-        return { nodes: [...state.nodes, newNode] };
+-    }),
+-
+-    updateNodePos: (id, x, y) => set((state) => ({
+-        nodes: state.nodes.map(n => n.id === id ? { ...n, x, y } : n)
+-    })),
+-
+-    updateNodeLabel: (id, label) => set((state) => ({
+-        nodes: state.nodes.map(n => n.id === id ? { ...n, label } : n)
+-    })),
+-
+-    deleteNode: (id) => set((state) => ({
+-        nodes: state.nodes.filter(n => n.id !== id),
+-        edges: state.edges.filter(e => e.source !== id && e.target !== id)
+-    })),
+-
+-    addEdge: (source, target, weight = 1) => set((state) => {
+-        if (source === target) return {};
+-
+-        const exists = state.edges.some(e =>
+-            (e.source === source && e.target === target) ||
+-            (!state.isDirected && e.source === target && e.target === source)
+-        );
+-        if (exists) return {};
+-
+-        const newEdge = {
+-            id: `edge-${Date.now()}`,
+-            source,
+-            target,
+-            weight: parseInt(weight) || 1,
+-            classification: null
+-        };
+-        return { edges: [...state.edges, newEdge] };
+-    }),
+-
+-    updateEdge: (id, data) => set((state) => ({
+-        edges: state.edges.map(e => e.id === id ? { ...e, ...data } : e)
+-    })),
+-
+-    updateEdgeWeight: (id, weight) => set((state) => ({
+-        edges: state.edges.map(e => e.id === id ? { ...e, weight: parseInt(weight) || 1 } : e)
+-    })),
+-
+-    deleteEdge: (id) => set((state) => ({
+-        edges: state.edges.filter(e => e.id !== id)
+-    })),
+-
+-    setEdgeClassification: (edgeId, classification) => set((state) => ({
+-        edges: state.edges.map(e => e.id === edgeId ? { ...e, classification } : e)
+-    })),
+-
+-    setNodeColor: (nodeId, color) => set((state) => ({
+-        nodes: state.nodes.map(n => n.id === nodeId ? { ...n, color } : n)
+-    })),
+-
+-    clearClassification: () => set((state) => ({
+-        edges: state.edges.map(e => ({ ...e, classification: null }))
+-    })),
+-
+-    resetGraph: () => set({
+-        nodes: [],
+-        edges: [],
+-        activeDS: [],
+-        dsAction: null,
+-        backEdges: []
+-    }),
+-
+-    loadGraphData: (nodes, edges, isDirected) => set({
+-        nodes: nodes.map(n => ({ ...n, originalPos: { x: n.x, y: n.y }, treePos: null })),
+-        edges: edges.map(e => ({ ...e, classification: null })),
+-        isDirected
+-    }),
+-
+-    // DS Actions
++    // Actions
+     pushDS: (item) => set((state) => ({
+         activeDS: [...state.activeDS, item],
+         dsAction: 'push'
+@@ -124,13 +24,23 @@
+     popDS: () => set((state) => {
+         if (state.activeDS.length === 0) return {};
+         const newDS = [...state.activeDS];
+-        newDS.shift();
++        newDS.shift(); // Remove from front for Queue visualization? 
++        // Wait, for Stack it's pop(), for Queue it's shift().
++        // The visualization might need to handle this differently or we just receive the *new* state.
++        // Actually, for better animations, we might want to know *what* was popped.
++        // But for simplicity, let's trust the 'updateDS' or specific push/pop.
++
++        // However, the visualizer usually just renders the array. 
++        // To animate 'pop', we might need to know which one left?
++        // Let's stick to updateDS regarding the array content if complex, 
++        // but push/pop actions are useful for triggers.
+         return {
+             activeDS: newDS,
+             dsAction: 'pop'
+         };
+     }),
+ 
++    // Generic update for replacing content (e.g. after a pop effectively)
+     updateDS: (newDS, action = 'update') => set({
+         activeDS: newDS,
+         dsAction: action
+@@ -143,112 +53,23 @@
+     resetDS: () => set({
+         activeDS: [],
+         dsAction: null,
+-        dsAction: null,
+         backEdges: [],
+-        resultData: null, // { type: 'scc' | 'ap', data: ... }
+-        resultLayout: {}
++        routingTable: {},
++        activeTableNodeId: null,
++        lsdb: []
+     }),
+ 
+-    // Result Data Action
+-    setResultData: (data) => set({ resultData: data }),
+-    setResultLayout: (layout) => set({ resultLayout: layout }),
+-    updateResultNodePos: (id, x, y) => set((state) => ({
+-        resultLayout: {
+-            ...state.resultLayout,
+-            [id]: { x, y }
+-        }
+-    })),
+-
+-    // Simulation History
+-    history: [],
+-    currentStepIndex: -1,
+-
+-    // Internal State for Memory Inspector
+-    internalState: {
+-        visited: [], // Set or Array of IDs
+-        distances: {}, // NodeId -> Distance
+-        parents: {}, // NodeId -> ParentId
+-        queue: [] // Current Queue/Stack/PQ content
+-    },
+-
+-    setInternalState: (state) => set({ internalState: state }),
+-
+-    // History Actions
+-    pushHistorySnapshot: () => set((state) => {
+-        // Deep clone relevant state
+-        const snapshot = {
+-            nodes: JSON.parse(JSON.stringify(state.nodes)),
+-            edges: JSON.parse(JSON.stringify(state.edges)),
+-            activeDS: JSON.parse(JSON.stringify(state.activeDS)),
+-            backEdges: JSON.parse(JSON.stringify(state.backEdges)),
+-            activeDS: JSON.parse(JSON.stringify(state.activeDS)),
+-            backEdges: JSON.parse(JSON.stringify(state.backEdges)),
+-            internalState: JSON.parse(JSON.stringify(state.internalState)),
+-            resultLayout: JSON.parse(JSON.stringify(state.resultLayout))
+-        };
+-
+-        const newHistory = [...state.history.slice(0, state.currentStepIndex + 1), snapshot];
+-        return {
+-            history: newHistory,
+-            currentStepIndex: newHistory.length - 1
+-        };
++    updateRoutingTable: (table) => set({
++        routingTable: table
+     }),
+ 
+-    stepForward: () => set((state) => {
+-        if (state.currentStepIndex >= state.history.length - 1) return {};
+-        const nextIndex = state.currentStepIndex + 1;
+-        const snapshot = state.history[nextIndex];
+-        return {
+-            nodes: snapshot.nodes,
+-            edges: snapshot.edges,
+-            activeDS: snapshot.activeDS,
+-            backEdges: snapshot.backEdges,
+-            activeDS: snapshot.activeDS,
+-            backEdges: snapshot.backEdges,
+-            internalState: snapshot.internalState,
+-            resultLayout: snapshot.resultLayout || {},
+-            currentStepIndex: nextIndex
+-        };
++    setActiveTableNodeId: (id) => set({
++        activeTableNodeId: id
+     }),
+ 
+-    stepBackward: () => set((state) => {
+-        if (state.currentStepIndex <= 0) return {};
+-        const prevIndex = state.currentStepIndex - 1;
+-        const snapshot = state.history[prevIndex];
+-        return {
+-            nodes: snapshot.nodes,
+-            edges: snapshot.edges,
+-            activeDS: snapshot.activeDS,
+-            backEdges: snapshot.backEdges,
+-            activeDS: snapshot.activeDS,
+-            backEdges: snapshot.backEdges,
+-            internalState: snapshot.internalState,
+-            resultLayout: snapshot.resultLayout || {},
+-            currentStepIndex: prevIndex
+-        };
+-    }),
+-
+-    goToStep: (index) => set((state) => {
+-        if (index < 0 || index >= state.history.length) return {};
+-        const snapshot = state.history[index];
+-        return {
+-            nodes: snapshot.nodes,
+-            edges: snapshot.edges,
+-            activeDS: snapshot.activeDS,
+-            backEdges: snapshot.backEdges,
+-            activeDS: snapshot.activeDS,
+-            backEdges: snapshot.backEdges,
+-            internalState: snapshot.internalState,
+-            resultLayout: snapshot.resultLayout || {},
+-            currentStepIndex: index
+-        };
+-    }),
+-
+-    resetHistory: () => set({
+-        history: [],
+-        currentStepIndex: -1,
+-        internalState: { visited: [], distances: {}, parents: {}, queue: [] }
+-    }),
++    addLsa: (lsa) => set(state => ({
++        lsdb: [...state.lsdb, lsa]
++    })),
+ }));
+ 
+ export default useGraphStore;
+--- C:/Users/taksh/Desktop/sdp/src/components/Sidebar.jsx
++++ C:/Users/taksh/Desktop/sdp_merge/AlgoCore/src/components/Sidebar.jsx
+@@ -1,25 +1,26 @@
+-import React from 'react';
+-import useGraphStore from '../store/useGraphStore';
++import React, { useState } from 'react';
++import { useGraph } from '../context/GraphContext';
+ import { useAlgorithm } from '../context/AlgorithmContext';
+-import { Play, Pause, RotateCcw, Settings, Plus, Trash2, SkipBack, SkipForward } from 'lucide-react';
++import { Play, Pause, RotateCcw, Settings, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+ import { cn } from '../utils/cn';
+ 
+ import { SAMPLES } from '../services/sampleData';
++import { PSEUDOCODE } from '../algorithms/pseudocode';
+ 
+ const Sidebar = () => {
+     const {
+         nodes, edges, isDirected, setIsDirected,
+-        addNode, resetGraph, loadGraphData,
+-        startNodeId, setStartNodeId,
+-        targetNodeId, setTargetNodeId
+-    } = useGraphStore();
++        addNode, addEdge, resetGraph, loadGraphData
++    } = useGraph();
+ 
+     const {
+         selectedAlgorithm, setSelectedAlgorithm,
+         runAlgorithm, isPlaying, setIsPlaying,
+         speed, setSpeed, resetAlgorithm,
+-        history, currentStep, stepForward, stepBackward, goToStep
++        nextStep, prevStep, currentStep, currentLine
+     } = useAlgorithm();
++
++    const [edgeInput, setEdgeInput] = useState({ source: '', target: '', weight: '1' });
+ 
+     const handleLoadSample = () => {
+         const sample = SAMPLES[selectedAlgorithm];
+@@ -28,8 +29,16 @@
+             loadGraphData(sample.nodes, sample.edges, sample.isDirected);
+         } else {
+             console.warn("No sample for", selectedAlgorithm);
++            // Fallback or alert? For now just log.
++            // Maybe load DFS sample as default if not found?
+             const defaultSample = SAMPLES['dfs'];
+             if (defaultSample) loadGraphData(defaultSample.nodes, defaultSample.edges, defaultSample.isDirected);
++        }
++    };
++
++    const handleAddEdge = () => {
++        if (edgeInput.source && edgeInput.target) {
++            addEdge(edgeInput.source, edgeInput.target, edgeInput.weight);
+         }
+     };
+ 
+@@ -53,8 +62,7 @@
+                             onClick={() => setIsDirected(!isDirected)}
+                             className={cn(
+                                 "w-10 h-5 rounded-full relative transition-colors duration-200",
+-                                "bg-gray-300",
+-                                isDirected && "bg-blue-600"
++                                isDirected ? "bg-blue-600" : "bg-gray-300"
+                             )}
+                         >
+                             <div className={cn(
+@@ -72,7 +80,7 @@
+                             Load Sample
+                         </button>
+                         <button
+-                            onClick={() => { resetGraph(); resetAlgorithm(); }}
++                            onClick={resetGraph}
+                             className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                             title="Clear Graph"
+                         >
+@@ -87,17 +95,45 @@
+                     </button>
+                 </div>
+ 
+-                {/* Instructions / Interactions */}
++                {/* Edge Input */}
+                 <div className="space-y-3">
+-                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Interactions</h3>
+-                    <div className="text-sm text-gray-600 space-y-2 p-3 bg-blue-50 rounded-md border border-blue-100">
+-                        <p><strong>Add Node:</strong> Double-Click Canvas</p>
+-                        <p><strong>Edit Node:</strong> Click Node</p>
+-                        <p><strong>Add Edge:</strong> Click Source Node ΓåÆ Click Target Node</p>
+-                        <p><strong>Edit Edge:</strong> Click Edge</p>
++                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Add Edge</h3>
++                    <div className="grid grid-cols-2 gap-2">
++                        <select
++                            value={edgeInput.source}
++                            onChange={e => setEdgeInput(p => ({ ...p, source: e.target.value }))}
++                            className="p-2 border rounded-md text-sm bg-gray-50 focus:border-blue-500 outline-none"
++                        >
++                            <option value="">Source</option>
++                            {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
++                        </select>
++                        <select
++                            value={edgeInput.target}
++                            onChange={e => setEdgeInput(p => ({ ...p, target: e.target.value }))}
++                            className="p-2 border rounded-md text-sm bg-gray-50 focus:border-blue-500 outline-none"
++                        >
++                            <option value="">Target</option>
++                            {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
++                        </select>
++                    </div>
++                    <div className="flex gap-2">
++                        <input
++                            type="number"
++                            placeholder="W"
++                            value={edgeInput.weight}
++                            onChange={e => setEdgeInput(p => ({ ...p, weight: e.target.value }))}
++                            className="w-16 p-2 border rounded-md text-sm bg-gray-50 outline-none focus:border-blue-500"
++                        />
++                        <button
++                            onClick={handleAddEdge}
++                            disabled={!edgeInput.source || !edgeInput.target}
++                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
++                        >
++                            Add Edge
++                        </button>
+                     </div>
+                     {/* Edge Count */}
+-                    <div className="text-xs text-gray-400 text-center mt-2">
++                    <div className="text-xs text-gray-400 text-center">
+                         {edges.length} edges | {nodes.length} nodes
+                     </div>
+                 </div>
+@@ -105,175 +141,111 @@
+                 {/* Algorithms */}
+                 <div className="space-y-3 pt-4 border-t border-gray-100">
+                     <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Algorithm</h3>
+-
+-                    {/* Algorithm Select */}
+-                    <div className="space-y-1">
+-                        <label className="text-xs text-gray-400 font-medium">Algorithm</label>
+-                        <select
+-                            value={selectedAlgorithm}
+-                            onChange={e => setSelectedAlgorithm(e.target.value)}
+-                            className="w-full p-2 border rounded-md text-sm bg-gray-50 outline-none focus:border-blue-500 font-medium"
+-                        >
+-                            <option value="dfs">Depth First Search (DFS)</option>
+-                            <option value="bfs">Breadth First Search (BFS)</option>
+-                            <option value="dijkstra">Dijkstra's Shortest Path</option>
+-                            <option value="prim">Prim's MST</option>
+-                            <option value="kruskal">Kruskal's MST</option>
+-                            <option value="scc">Strongly Connected Components (Tarjan's)</option>
+-                            <option value="articulationPoints">Articulation Points</option>
+-                            <option value="floydWarshall">Floyd-Warshall (All-Pairs)</option>
+-                        </select>
+-                    </div>
+-
+-                    {/* Start Node Select (Hidden for Floyd-Warshall) */}
+-                    {selectedAlgorithm !== 'floydWarshall' && (
+-                        <div className="space-y-1">
+-                            <label className="text-xs text-gray-400 font-medium">Starting Node</label>
+-                            <select
+-                                value={startNodeId ?? (nodes.length > 0 ? nodes[0].id : '')}
+-                                onChange={e => {
+-                                    const val = e.target.value;
+-                                    if (val === '') {
+-                                        setStartNodeId(null);
+-                                    } else {
+-                                        // Handle numeric IDs vs string IDs (samples used 'node-1', custom uses 1, 2...)
+-                                        const num = Number(val);
+-                                        setStartNodeId(isNaN(num) ? val : num);
+-                                    }
+-                                }}
+-                                className="w-full p-2 border rounded-md text-sm bg-gray-50 outline-none focus:border-blue-500 font-medium"
+-                                disabled={nodes.length === 0}
+-                            >
+-                                {nodes.map(node => (
+-                                    <option key={node.id} value={node.id}>
+-                                        {node.label}
+-                                    </option>
+-                                ))}
+-                            </select>
+-                        </div>
+-                    )}
+-
+-                    {/* Target Node Select (Dijkstra Only) */}
+-                    {selectedAlgorithm === 'dijkstra' && (
+-                        <div className="space-y-1">
+-                            <label className="text-xs text-gray-400 font-medium">Target Node</label>
+-                            <select
+-                                value={targetNodeId ?? ''}
+-                                onChange={e => {
+-                                    const val = e.target.value;
+-                                    if (val === '') {
+-                                        setTargetNodeId(null);
+-                                    } else {
+-                                        const num = Number(val);
+-                                        setTargetNodeId(isNaN(num) ? val : num);
+-                                    }
+-                                }}
+-                                className="w-full p-2 border rounded-md text-sm bg-gray-50 outline-none focus:border-blue-500 font-medium"
+-                                disabled={nodes.length === 0}
+-                            >
+-                                <option value="">(None)</option>
+-                                {nodes.map(node => (
+-                                    <option key={node.id} value={node.id}>
+-                                        {node.label}
+-                                    </option>
+-                                ))}
+-                            </select>
+-                        </div>
+-                    )}
++                    <select
++                        value={selectedAlgorithm}
++                        onChange={e => setSelectedAlgorithm(e.target.value)}
++                        className="w-full p-2 border rounded-md text-sm bg-gray-50 outline-none focus:border-blue-500 font-medium"
++                    >
++                        <option value="dfs">Depth First Search (DFS)</option>
++                        <option value="bfs">Breadth First Search (BFS)</option>
++                        <option value="dijkstra">Dijkstra's Shortest Path</option>
++                        <option value="prim">Prim's MST</option>
++                        <option value="kruskal">Kruskal's MST</option>
++                        <option value="scc">Strongly Connected Components</option>
++                        <option value="distanceVector">Distance Vector Routing</option>
++                        <option value="linkState">Link State Routing</option>
++                    </select>
++                </div>
++
++                {/* Code Visualization */}
++                <div className="space-y-3 pt-4 border-t border-gray-100">
++                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Code Execution</h3>
++                    <div className="bg-gray-50 p-2 rounded-md border border-gray-200 font-mono text-xs overflow-hidden h-16 flex flex-col justify-center">
++                        {(() => {
++                            const codeLines = PSEUDOCODE[selectedAlgorithm] || [];
++                            const line = currentLine;
++
++                            // We want nicely centered 3 lines: prev, curr, next
++                            // If line is -1 (start), show first few? Or just empty?
++                            // User request: "curr executing, next line, previous line"
++                            // If not running (line = -1), maybe show just start of code or empty?
++
++                            if (line === -1) {
++                                return <div className="text-gray-400 italic text-center">Ready to run...</div>;
++                            }
++
++                            const prev = codeLines[line - 1] || '\u00A0'; // Non-breaking space for empty
++                            const curr = codeLines[line] || 'Done';
++                            const next = codeLines[line + 1] || '\u00A0';
++
++                            return (
++                                <>
++                                    <div className="text-gray-400 truncate whitespace-nowrap">{prev}</div>
++                                    <div className="text-blue-600 font-bold truncate whitespace-nowrap bg-blue-50 -mx-2 px-2 py-0.5">{curr}</div>
++                                    <div className="text-gray-400 truncate whitespace-nowrap">{next}</div>
++                                </>
++                            );
++                        })()}
++                    </div>
+                 </div>
+             </div>
+ 
+             {/* Playback Controls */}
+-            <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-3">
+-
+-                {/* Timeline Slider */}
+-                <div className="space-y-1">
+-                    <div className="flex justify-between text-xs text-gray-500">
+-                        <span>Timeline</span>
+-                        <span>{isPlaying ? 'Playing...' : `Step ${currentStep}/${history.length > 0 ? history.length - 1 : 0}`}</span>
+-                    </div>
++            <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-4">
++                <div className="flex items-center gap-2 justify-between">
++                    <span className="text-xs font-semibold text-gray-500 uppercase">Speed</span>
+                     <input
+                         type="range"
+-                        min="0"
+-                        max={history.length > 0 ? history.length - 1 : 0}
+-                        value={currentStep}
+-                        onChange={(e) => {
+-                            const step = parseInt(e.target.value);
+-                            goToStep(step);
+-                            if (isPlaying) setIsPlaying(false);
++                        min="100"
++                        max="2000"
++                        step="100"
++                        value={speed}
++                        onChange={e => setSpeed(Number(e.target.value))}
++                        className="w-24 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
++                    />
++                </div>
++
++                <div className="flex gap-2">
++                    <button
++                        onClick={prevStep}
++                        disabled={currentStep === 0 || isPlaying}
++                        className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
++                        title="Previous Step"
++                    >
++                        <ChevronLeft className="w-4 h-4" />
++                    </button>
++
++                    {!isPlaying ? (
++                        <button
++                            onClick={() => { runAlgorithm(); setIsPlaying(true); }}
++                            className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md flex items-center justify-center gap-2 font-medium transition-colors"
++                        >
++                            <Play className="w-4 h-4" /> Run
++                        </button>
++                    ) : (
++                        <button
++                            onClick={() => setIsPlaying(false)}
++                            className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md flex items-center justify-center gap-2 font-medium transition-colors"
++                        >
++                            <Pause className="w-4 h-4" /> Pause
++                        </button>
++                    )}
++
++                    <button
++                        onClick={() => {
++                            setIsPlaying(false);
++                            nextStep();
+                         }}
+-                        disabled={history.length === 0}
+-                        className="w-full h-1.5 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"
+-                    />
+-                </div>
+-
+-                {/* Control Buttons */}
+-                <div className="flex items-center gap-1 justify-between">
+-                    <button
+-                        onClick={() => {
+-                            stepBackward();
+-                            if (isPlaying) setIsPlaying(false);
+-                        }}
+-                        disabled={currentStep <= 0}
+-                        className="p-2 text-gray-600 hover:bg-gray-200 rounded-md disabled:opacity-30 transition-colors"
+-                        title="Step Back"
+-                    >
+-                        <SkipBack className="w-5 h-5" />
+-                    </button>
+-
+-                    {!isPlaying ? (
+-                        <button
+-                            onClick={() => {
+-                                if (history.length === 0) {
+-                                    runAlgorithm();
+-                                    setIsPlaying(true);
+-                                } else {
+-                                    setIsPlaying(true);
+-                                }
+-                            }}
+-                            className="flex-1 max-w-[120px] py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md flex items-center justify-center gap-2 font-medium transition-colors shadow-sm"
+-                        >
+-                            <Play className="w-4 h-4 fill-current" /> Play
+-                        </button>
+-                    ) : (
+-                        <button
+-                            onClick={() => setIsPlaying(false)}
+-                            className="flex-1 max-w-[120px] py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md flex items-center justify-center gap-2 font-medium transition-colors shadow-sm"
+-                        >
+-                            <Pause className="w-4 h-4 fill-current" /> Pause
+-                        </button>
+-                    )}
+-
+-                    <button
+-                        onClick={() => {
+-                            stepForward();
+-                            if (isPlaying) setIsPlaying(false);
+-                        }}
+-                        disabled={currentStep >= (history.length > 0 ? history.length - 1 : 0) && history.length > 0}
+-                        className="p-2 text-gray-600 hover:bg-gray-200 rounded-md disabled:opacity-30 transition-colors"
+-                        title="Step Forward"
+-                    >
+-                        <SkipForward className="w-5 h-5" />
+-                    </button>
+-                </div>
+-
+-                <div className="flex items-center justify-between pt-2 border-t border-gray-200 mt-2">
+-                    <div className="flex items-center gap-2">
+-                        <span className="text-xs font-semibold text-gray-500 uppercase">Speed</span>
+-                        <input
+-                            type="range"
+-                            min="100"
+-                            max="2000"
+-                            step="100"
+-                            value={speed}
+-                            onChange={e => setSpeed(Number(e.target.value))}
+-                            className="w-20 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+-                        />
+-                    </div>
++                        className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors"
++                        title="Next Step"
++                    >
++                        <ChevronRight className="w-4 h-4" />
++                    </button>
++
+                     <button
+                         onClick={resetAlgorithm}
+-                        className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-md transition-colors"
+-                        title="Reset Simulation"
++                        className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors"
++                        title="Reset"
+                     >
+                         <RotateCcw className="w-4 h-4" />
+                     </button>
+--- C:/Users/taksh/Desktop/sdp/src/context/AlgorithmContext.jsx
++++ C:/Users/taksh/Desktop/sdp_merge/AlgoCore/src/context/AlgorithmContext.jsx
+@@ -1,4 +1,5 @@
+ import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
++import { useGraph } from './GraphContext';
+ import * as algorithms from '../algorithms';
+ import useGraphStore from '../store/useGraphStore';
+ 
+@@ -8,34 +9,43 @@
+ export const useAlgorithm = () => useContext(AlgorithmContext);
+ 
+ export const AlgorithmProvider = ({ children }) => {
+-    // Store actions
+-    const {
+-        nodes, edges, startNodeId, targetNodeId,
+-        clearClassification, setEdgeClassification, setNodeColor,
+-        updateDS, addBackEdge, resetDS, setResultData,
+-        setInternalState, pushHistorySnapshot, resetHistory,
+-        currentStepIndex, history: storeHistory, stepForward, stepBackward, goToStep
+-    } = useGraphStore();
+-
++    const { nodes, edges, clearClassification, setEdgeClassification, setNodeColor } = useGraph();
+     const [selectedAlgorithm, setSelectedAlgorithm] = useState('dfs');
+     const [isPlaying, setIsPlaying] = useState(false);
+     const [speed, setSpeed] = useState(1000); // ms
++    const [currentStep, setCurrentStep] = useState(0);
++    const [history, setHistory] = useState([]);
+     const [logs, setLogs] = useState([]);
++    const [currentLine, setCurrentLine] = useState(-1);
++    const [visited, setVisited] = useState([]); // Array of node IDs
++    const [parent, setParent] = useState({}); // Map childId -> parentId
++    const [components, setComponents] = useState([]); // Added components state
+ 
+     const generatorRef = useRef(null);
+     const timerRef = useRef(null);
+ 
++    // Store actions
++    const { updateDS, addBackEdge, resetDS } = useGraphStore();
++
++    const resetVisuals = useCallback(() => {
++        clearClassification();
++        resetDS();
++        nodes.forEach(n => setNodeColor(n.id, undefined));
++        setCurrentLine(-1);
++        setVisited([]);
++        setParent({});
++        setComponents([]);
++    }, [clearClassification, resetDS, nodes, setNodeColor, setCurrentLine]);
++
+     const resetAlgorithm = useCallback(() => {
+         setIsPlaying(false);
++        setCurrentStep(0);
++        setHistory([]);
+         setLogs([]);
+-        clearClassification();
+-        resetDS();
+-        resetHistory();
+-        // Reset node colors
+-        nodes.forEach(n => setNodeColor(n.id, undefined));
++        resetVisuals();
+         generatorRef.current = null;
+         if (timerRef.current) clearInterval(timerRef.current);
+-    }, [clearClassification, nodes, setNodeColor, resetDS, resetHistory]);
++    }, [resetVisuals]);
+ 
+     const runAlgorithm = useCallback(() => {
+         resetAlgorithm(); // Clear previous run
+@@ -44,79 +54,126 @@
+             return;
+         }
+ 
+-        // Use startNodeId from store, invalid or null, default to first (0)
+-        let effectiveStartId = startNodeId;
+-        if (effectiveStartId === null || !nodes.find(n => n.id === effectiveStartId)) {
+-            effectiveStartId = nodes[0]?.id;
+-            console.warn("Algorithm: Invalid/Null start node, defaulting to:", effectiveStartId);
+-        }
+-
+-        console.log("Algorithm: Starting", { selectedAlgorithm, startNodeId: effectiveStartId, targetNodeId, nodesCount: nodes.length });
++        const startNodeId = nodes[0]?.id;
++        console.log("Algorithm: Starting", { selectedAlgorithm, startNodeId, nodesCount: nodes.length });
+ 
+         const algoFunc = algorithms[selectedAlgorithm];
+         if (algoFunc) {
+-            generatorRef.current = algoFunc(nodes, edges, effectiveStartId, targetNodeId);
++            generatorRef.current = algoFunc(nodes, edges, startNodeId);
+             console.log("Algorithm: Generator created");
+-
+-            // Take initial snapshot
+-            pushHistorySnapshot();
+-
+         } else {
+             console.error("Algorithm: Function not found for", selectedAlgorithm);
+         }
+-    }, [nodes, edges, selectedAlgorithm, startNodeId, targetNodeId, resetAlgorithm, pushHistorySnapshot]);
++    }, [nodes, edges, selectedAlgorithm, resetAlgorithm]);
++
++    const applyStep = useCallback((stepData) => {
++        if (!stepData) return;
++
++        if (stepData.type === 'LOG') {
++            // Logs are handled nicely by state append usually, but for replay we might need to be careful
++            // For single step forward, we append outside. For replay, we might need a different approach?
++            // Actually, let's keep log handling separate or pass a "replaying" flag?
++            // To be safe, let's just use the visual setters here.
++        } else if (stepData.type === 'CLASSIFY_EDGE') {
++            setEdgeClassification(stepData.edgeId, stepData.classification);
++        } else if (stepData.type === 'SET_NODE_COLOR') {
++            setNodeColor(stepData.nodeId, stepData.color);
++        } else if (stepData.type === 'DS_UPDATE') {
++            updateDS(stepData.data, stepData.action);
++        } else if (stepData.type === 'ADD_BACK_EDGE') {
++            addBackEdge({
++                id: stepData.edgeId,
++                source: stepData.source,
++                target: stepData.target,
++                classification: stepData.classification
++            });
++        } else if (stepData.type === 'SET_LINE') {
++            setCurrentLine(stepData.lineIndex);
++        } else if (stepData.type === 'UPDATE_VISITED') {
++            setVisited(prev => {
++                if (prev.includes(stepData.nodeId)) return prev;
++                return [...prev, stepData.nodeId];
++            });
++        } else if (stepData.type === 'UPDATE_PARENT') {
++            setParent(prev => ({
++                ...prev,
++                [stepData.childId]: stepData.parentId
++            }));
++        } else if (stepData.type === 'FOUND_COMPONENT') {
++            setComponents(prev => [...prev, stepData.component]);
++        } else if (stepData.type === 'DS_UPDATE_ROUTING_TABLE') {
++            useGraphStore.getState().updateRoutingTable(stepData.table);
++        } else if (stepData.type === 'SET_ACTIVE_TABLE_NODE') {
++            useGraphStore.getState().setActiveTableNodeId(stepData.nodeId);
++        } else if (stepData.type === 'ADD_LSA') {
++            useGraphStore.getState().addLsa(stepData.lsa);
++        }
++    }, [setEdgeClassification, setNodeColor, updateDS, addBackEdge, setCurrentLine, setVisited, setParent, setComponents]);
+ 
+     const nextStep = useCallback(() => {
+-        // If we are not at the latest step of the history, just move forward in history
+-        if (currentStepIndex < storeHistory.length - 1) {
+-            stepForward();
++        if (!generatorRef.current) {
++            console.warn("Algorithm: No generator ref during nextStep");
+             return;
+         }
+ 
+-        // If we are at the end, we need the generator to compute the next step
+-        if (!generatorRef.current) {
+-            console.warn("Algorithm: No generator ref found in nextStep. Stopping playback.");
+-            setIsPlaying(false);
+-            return;
+-        }
+-
+-        const { value, done } = generatorRef.current.next();
++        const batch = [];
++        let done = false;
++
++        while (true) {
++            const { value, done: isDone } = generatorRef.current.next();
++            if (isDone) {
++                done = true;
++                break;
++            }
++            if (value) {
++                batch.push(value);
++                // Apply log/visuals immediately
++                if (value.type === 'LOG') {
++                    setLogs(prev => [...prev, value.message]);
++                }
++                applyStep(value);
++
++                // If we hit a new line marker, we treat this as the completion of the current logical step
++                if (value.type === 'SET_LINE') {
++                    break;
++                }
++            }
++        }
++
++        if (batch.length > 0) {
++            setHistory(prev => [...prev, batch]);
++            setCurrentStep(prev => prev + 1);
++        }
+ 
+         if (done) {
+             console.log("Algorithm: Finished");
+             setIsPlaying(false);
+-            return;
+-        }
+-
+-        if (value) {
+-            // Update Internal State if provided
+-            if (value.internalState) {
+-                setInternalState(value.internalState);
+-            }
+-
+-            if (value.type === 'LOG') {
+-                setLogs(prev => [...prev, value.message]);
+-            } else if (value.type === 'CLASSIFY_EDGE') {
+-                setEdgeClassification(value.edgeId, value.classification);
+-            } else if (value.type === 'SET_NODE_COLOR') {
+-                setNodeColor(value.nodeId, value.color);
+-            } else if (value.type === 'DS_UPDATE') {
+-                updateDS(value.data, value.action);
+-            } else if (value.type === 'ADD_BACK_EDGE') {
+-                addBackEdge({
+-                    id: value.edgeId,
+-                    source: value.source,
+-                    target: value.target,
+-                    classification: value.classification
+-                });
+-            } else if (value.type === 'SET_RESULT_DATA') {
+-                setResultData(value.data);
+-            }
+-
+-            // Capture Snapshot after state updates
+-            pushHistorySnapshot();
+-        }
+-    }, [currentStepIndex, storeHistory.length, stepForward, setEdgeClassification, setNodeColor, updateDS, addBackEdge, setInternalState, pushHistorySnapshot]);
++        }
++    }, [applyStep]);
++
++    const prevStep = useCallback(() => {
++        if (currentStep <= 0) return;
++        setIsPlaying(false);
++
++        const newStepCount = currentStep - 1;
++        resetVisuals();
++
++        // Flatten history up to newStepCount
++        // history is now Array<Array<Event>>.
++        // We want history[0] ... history[newStepCount - 1].
++
++        const stepsToReplay = history.slice(0, newStepCount);
++        const flattenedEvents = stepsToReplay.flat();
++
++        const newLogs = [];
++        flattenedEvents.forEach(step => {
++            if (step.type === 'LOG') newLogs.push(step.message);
++            applyStep(step);
++        });
++
++        setLogs(newLogs);
++        setCurrentStep(newStepCount);
++    }, [currentStep, history, resetVisuals, applyStep]);
+ 
+     useEffect(() => {
+         if (isPlaying) {
+@@ -134,12 +191,9 @@
+             selectedAlgorithm, setSelectedAlgorithm,
+             isPlaying, setIsPlaying,
+             speed, setSpeed,
+-            // Expose store history props
+-            currentStep: currentStepIndex,
+-            history: storeHistory,
+-            logs,
+-            runAlgorithm, nextStep, resetAlgorithm,
+-            stepForward, stepBackward, goToStep
++            currentStep, history, logs,
++            currentLine, visited, parent, components,
++            runAlgorithm, nextStep, prevStep, resetAlgorithm
+         }}>
+             {children}
+         </AlgorithmContext.Provider>
+--- C:/Users/taksh/Desktop/sdp/src/components/DataStructurePanel.jsx
++++ C:/Users/taksh/Desktop/sdp_merge/AlgoCore/src/components/DataStructurePanel.jsx
+@@ -2,11 +2,21 @@
+ import useGraphStore from '../store/useGraphStore';
+ import { motion, AnimatePresence } from 'framer-motion';
+ import { useAlgorithm } from '../context/AlgorithmContext';
+-import { Layers, Map as MapIcon, GitFork } from 'lucide-react';
++import { useGraph } from '../context/GraphContext';
+ 
+ const DataStructurePanel = ({ constraintsRef }) => {
+-    const { activeDS, nodes, internalState } = useGraphStore();
+-    const { selectedAlgorithm } = useAlgorithm();
++    const { activeDS } = useGraphStore();
++    const { selectedAlgorithm, visited, parent, components } = useAlgorithm(); // Added components
++    const { nodes } = useGraph();
++
++    // Determine type for label
++    const getTypeLabel = () => {
++        if (selectedAlgorithm === 'dfs') return 'Stack';
++        if (selectedAlgorithm === 'bfs') return 'Queue';
++        if (selectedAlgorithm === 'dijkstra' || selectedAlgorithm === 'prim') return 'Priority Queue';
++        return 'Data Structure';
++    };
++
+     // Memoize node lookup
+     const nodeLabelMap = useMemo(() => {
+         const map = {};
+@@ -14,294 +24,128 @@
+         return map;
+     }, [nodes]);
+ 
+-    const renderDSContent = () => {
+-        return (
+-            <div className="flex items-center gap-2 w-max px-2 pb-2 h-full pr-8">
+-                <AnimatePresence mode='popLayout'>
+-                    {activeDS.map((item, index) => {
+-                        const id = typeof item === 'object' ? item.id : item;
+-                        const priority = typeof item === 'object' ? (item.d ?? item.k ?? '') : '';
+-                        const label = nodeLabelMap[id] || id.toString().replace('node-', '');
+-
+-                        return (
+-                            <motion.div
+-                                layout
+-                                key={`${id}-${index}`}
+-                                initial={{ opacity: 0, scale: 0.8 }}
+-                                animate={{ opacity: 1, scale: 1 }}
+-                                exit={{ opacity: 0, scale: 0.5 }}
+-                                className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 border border-blue-300 flex items-center justify-center text-sm font-bold text-blue-700 relative"
+-                            >
+-                                {label}
+-                                {priority !== '' && (
+-                                    <span className="absolute -top-2 -right-2 bg-yellow-400 text-[10px] text-white px-1 rounded-full border border-white">
+-                                        {priority}
+-                                    </span>
+-                                )}
+-                            </motion.div>
+-                        );
+-                    })}
+-                </AnimatePresence>
+-                {activeDS.length === 0 && <span className="text-gray-400 text-sm italic mx-auto">Empty</span>}
+-            </div>
+-        );
+-    };
+-
+-    const renderInternalState = () => {
+-        if (!internalState || Object.keys(internalState).length === 0) return null;
+-
+-        const { visited } = internalState;
+-
+-        const renderVisitedArray = () => {
+-            if (!visited || visited.length === 0) return null;
+-            return (
+-                <div className="p-2 border-b border-gray-50 bg-green-50/50 sticky top-0 z-10 shrink-0">
+-                    <span className="text-xs font-bold text-green-700 uppercase tracking-wider mr-2">Visited:</span>
+-                    <span className="text-xs font-mono text-green-600 font-semibold break-words">
+-                        [ {visited.map(id => nodeLabelMap[id] || id).join(', ')} ]
+-                    </span>
+-                </div>
+-            );
+-        };
+-
+-        if (selectedAlgorithm === 'dfs' || selectedAlgorithm === 'bfs') {
+-            const { distances, parents } = internalState;
+-            if (!visited && !distances && !parents) return null;
+-
+-            return (
+-                <div className="flex flex-col w-full">
+-                    {renderVisitedArray()}
+-                    <div className="p-2 w-full">
+-                        <table className="w-full text-xs text-left">
+-                            <thead className="text-gray-400 font-normal">
+-                                <tr>
+-                                    <th className="pb-1">Node</th>
+-                                    <th className="pb-1">Parent</th>
+-                                </tr>
+-                            </thead>
+-                            <tbody className="text-gray-600 font-mono">
+-                                {Object.keys(nodeLabelMap).map(id => {
+-                                    const numId = Number(id);
+-                                    const isVisited = visited && (visited.includes(numId) || visited.includes(id) || visited.includes(id.toString()));
+-                                    const parent = parents?.[id];
+-                                    if (!isVisited && parent === undefined) return null;
+-
+-                                    return (
+-                                        <tr key={id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+-                                            <td className="py-1 font-bold text-blue-600">{nodeLabelMap[id]}</td>
+-                                            <td className="py-1 text-gray-500">{parent !== undefined && parent !== null ? nodeLabelMap[parent] : '-'}</td>
+-                                        </tr>
+-                                    );
+-                                })}
+-                            </tbody>
+-                        </table>
+-                    </div>
+-                </div>
+-            );
+-        }
+-
+-        if (selectedAlgorithm === 'dijkstra' || selectedAlgorithm === 'prim') {
+-            const { distances, parents } = internalState;
+-            if (!distances) return null;
+-
+-            return (
+-                <div className="flex flex-col w-full">
+-                    {renderVisitedArray()}
+-                    <div className="p-2 w-full">
+-                        <table className="w-full text-xs text-left">
+-                            <thead className="text-gray-400 font-normal">
+-                                <tr>
+-                                    <th className="pb-1">Node</th>
+-                                    <th className="pb-1">{selectedAlgorithm === 'dijkstra' ? 'Dist' : 'Key'}</th>
+-                                    <th className="pb-1">Parent</th>
+-                                </tr>
+-                            </thead>
+-                            <tbody className="text-gray-600 font-mono">
+-                                {Object.keys(nodeLabelMap).map(id => {
+-                                    const dist = distances[id];
+-                                    const parent = parents?.[id];
+-                                    const numId = Number(id);
+-                                    const isVisited = visited && (visited.includes(numId) || visited.includes(id) || visited.includes(id.toString()));
+-
+-                                    // Only show if modified from default infinity
+-                                    if (dist === Infinity && !isVisited) return null;
+-
+-                                    return (
+-                                        <tr key={id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+-                                            <td className="py-1 font-bold text-blue-600">{nodeLabelMap[id]}</td>
+-                                            <td className="py-1 font-semibold text-orange-500">{dist === Infinity ? 'Γê₧' : dist}</td>
+-                                            <td className="py-1 text-gray-500">{parent !== undefined && parent !== null ? nodeLabelMap[parent] : '-'}</td>
+-                                        </tr>
+-                                    );
+-                                })}
+-                            </tbody>
+-                        </table>
+-                    </div>
+-                </div>
+-            );
+-        }
+-
+-        if (selectedAlgorithm === 'kruskal') {
+-            const { disjointSet } = internalState;
+-            if (!disjointSet) return null;
+-
+-            return (
+-                <div className="flex flex-col w-full">
+-                    <div className="p-2 w-full">
+-                        <table className="w-full text-xs text-left">
+-                            <thead className="text-gray-400 font-normal">
+-                                <tr>
+-                                    <th className="pb-1">Node</th>
+-                                    <th className="pb-1">Set Parent</th>
+-                                </tr>
+-                            </thead>
+-                            <tbody className="text-gray-600 font-mono">
+-                                {Object.keys(nodeLabelMap).map(id => {
+-                                    const p = disjointSet[id];
+-                                    if (p === undefined) return null;
+-
+-                                    return (
+-                                        <tr key={id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+-                                            <td className="py-1 font-bold text-blue-600">{nodeLabelMap[id]}</td>
+-                                            <td className="py-1 font-semibold text-purple-600">{nodeLabelMap[p] || p}</td>
+-                                        </tr>
+-                                    );
+-                                })}
+-                            </tbody>
+-                        </table>
+-                    </div>
+-                </div>
+-            );
+-        }
+-
+-        if (selectedAlgorithm === 'scc' || selectedAlgorithm === 'articulationPoints') {
+-            const { discovery, lowLink, ids, ap } = internalState;
+-            // SCC uses 'ids', AP uses 'discovery'
+-            const discData = discovery || ids;
+-            if (!discData && !lowLink) return null;
+-
+-            return (
+-                <div className="flex flex-col w-full">
+-                    {renderVisitedArray()}
+-                    <div className="p-2 w-full">
+-                        <table className="w-full text-xs text-left">
+-                            <thead className="text-gray-400 font-normal">
+-                                <tr>
+-                                    <th className="pb-1">Node</th>
+-                                    <th className="pb-1">Disc</th>
+-                                    <th className="pb-1">Low</th>
+-                                    {selectedAlgorithm === 'articulationPoints' && <th className="pb-1">Is AP?</th>}
+-                                </tr>
+-                            </thead>
+-                            <tbody className="text-gray-600 font-mono">
+-                                {Object.keys(nodeLabelMap).map(id => {
+-                                    const disc = discData?.[id];
+-                                    const low = lowLink?.[id];
+-
+-                                    // Only show if at least visited
+-                                    if (disc === undefined && low === undefined) return null;
+-                                    if (disc === -1 && low === -1) return null;
+-
+-                                    const isAp = ap?.includes(Number(id));
+-
+-                                    return (
+-                                        <tr key={id} className="border-b border-gray-50 last:border-0">
+-                                            <td className="py-1 font-bold text-blue-600">{nodeLabelMap[id]}</td>
+-                                            <td className="py-1">{disc !== undefined && disc !== -1 ? disc : '-'}</td>
+-                                            <td className="py-1 text-orange-500">{low !== undefined && low !== -1 ? low : '-'}</td>
+-                                            {selectedAlgorithm === 'articulationPoints' && (
+-                                                <td className={`py-1 font-bold ${isAp ? 'text-red-500' : 'text-gray-400'}`}>
+-                                                    {isAp ? 'Yes' : 'No'}
+-                                                </td>
+-                                            )}
+-                                        </tr>
+-                                    );
+-                                })}
+-                            </tbody>
+-                        </table>
+-                    </div>
+-                </div>
+-            );
+-        }
+-        if (selectedAlgorithm === 'floydWarshall') {
+-            const { matrix, activeNodes } = internalState;
+-            if (!matrix) return null;
+-
+-            const nodeIds = Object.keys(nodeLabelMap);
+-
+-            return (
+-                <div className="p-2 w-full overflow-x-auto">
+-                    <table className="min-w-full text-xs text-center border-collapse">
+-                        <thead className="text-gray-400 font-normal">
+-                            <tr>
+-                                <th className="p-1 border-b border-r border-gray-100 bg-gray-50 sticky left-0 z-10 w-8"></th>
+-                                {nodeIds.map(id => (
+-                                    <th key={id} className={`p-1 border-b border-gray-100 font-bold ${activeNodes?.k === id || activeNodes?.k === Number(id) ? 'text-yellow-600 bg-yellow-50' : ''}`}>{nodeLabelMap[id]}</th>
+-                                ))}
+-                            </tr>
+-                        </thead>
+-                        <tbody className="text-gray-600 font-mono">
+-                            {nodeIds.map(rowId => (
+-                                <tr key={rowId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+-                                    <td className={`p-1 font-bold text-blue-600 border-r border-gray-100 bg-gray-50 sticky left-0 z-10 ${activeNodes?.k === rowId || activeNodes?.k === Number(rowId) ? 'text-yellow-600 bg-yellow-50' : ''}`}>{nodeLabelMap[rowId]}</td>
+-                                    {nodeIds.map(colId => {
+-                                        const dist = matrix[rowId]?.[colId];
+-                                        const isInf = dist === Infinity || dist === undefined;
+-                                        const isRowIdMatch = activeNodes?.i === rowId || activeNodes?.i === Number(rowId);
+-                                        const isColIdMatch = activeNodes?.j === colId || activeNodes?.j === Number(colId);
+-                                        const isActive = isRowIdMatch && isColIdMatch;
+-
+-                                        return (
+-                                            <td key={colId} className={`p-1 ${isActive ? 'bg-blue-100 text-blue-700 font-bold scale-110' : ''}`}>
+-                                                {isInf ? 'Γê₧' : dist}
+-                                            </td>
+-                                        );
+-                                    })}
+-                                </tr>
+-                            ))}
+-                        </tbody>
+-                    </table>
+-                </div>
+-            );
+-        }
+-
+-        return null;
+-    };
+-
+     return (
+         <motion.div
+             drag
+             dragConstraints={constraintsRef}
+             dragMomentum={false}
+-            dragElastic={0}
+-            className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md rounded-xl shadow-xl border border-gray-200 flex flex-col z-20 overflow-hidden resize both min-w-[320px] min-h-[220px]"
+-            style={{ width: 360, height: 260 }}
++            initial={{ x: "-50%", y: 0 }}
++            style={{ left: "50%", bottom: "1rem" }}
++            className="absolute bg-white/90 backdrop-blur-md rounded-xl shadow-lg border border-gray-200 p-4 w-[600px] flex flex-col gap-4 z-20 cursor-move"
+         >
+-            {(selectedAlgorithm !== 'floydWarshall' && activeDS.length > 0) && (
+-                <div className="p-2 border-b border-gray-100 bg-gray-50 flex justify-between items-center cursor-move active:cursor-grabbing shrink-0">
+-                    <div className="flex gap-2">
+-                        <span className="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded bg-white shadow-sm text-blue-600">
+-                            {selectedAlgorithm === 'dfs' || selectedAlgorithm === 'scc' || selectedAlgorithm === 'articulationPoints' ? 'Stack' :
+-                                selectedAlgorithm === 'kruskal' ? 'Edges' : 'Queue'}
+-                        </span>
++
++            {/* Primary Data Structure (Stack/Queue) */}
++            <div className="relative h-16 w-full">
++                <div className="absolute -top-1 left-0 text-xs font-bold text-gray-400 uppercase tracking-wider">
++                    {getTypeLabel()} {activeDS.length > 0 && `(${activeDS.length})`}
++                </div>
++                <div className="flex items-center gap-2 w-full mt-4 overflow-x-auto px-2 scrollbar-hide h-full">
++                    <AnimatePresence mode='popLayout'>
++                        {activeDS.map((item, index) => {
++                            const id = typeof item === 'object' ? item.id : item;
++                            const priority = typeof item === 'object' ? (item.d ?? item.k ?? '') : '';
++                            const label = nodeLabelMap[id] || id.toString().replace('node-', '');
++
++                            return (
++                                <motion.div
++                                    key={`${id}-${index}`}
++                                    initial={{ opacity: 0, scale: 0.8 }}
++                                    animate={{ opacity: 1, scale: 1 }}
++                                    exit={{ opacity: 0, scale: 0.5 }}
++                                    layout
++                                    className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 border border-blue-300 flex items-center justify-center text-sm font-bold text-blue-700 relative"
++                                >
++                                    {label}
++                                    {priority !== '' && (
++                                        <span className="absolute -top-2 -right-2 bg-yellow-400 text-[10px] text-white px-1 rounded-full border border-white">
++                                            {priority}
++                                        </span>
++                                    )}
++                                </motion.div>
++                            );
++                        })}
++                    </AnimatePresence>
++                    {activeDS.length === 0 && <div className="text-gray-400 text-sm italic w-full text-center">Empty</div>}
++                </div>
++            </div>
++
++            {/* Parent Array */}
++            <div className="relative h-16 w-full border-t border-gray-100 pt-2">
++                <div className="absolute top-1 left-0 text-xs font-bold text-gray-400 uppercase tracking-wider">
++                    Parent Array
++                </div>
++                <div className="flex items-center gap-2 w-full mt-5 overflow-x-auto px-2 scrollbar-hide">
++                    <AnimatePresence>
++                        {Object.entries(parent).map(([childId, parentId]) => {
++                            const childLabel = nodeLabelMap[childId] || childId;
++                            const parentLabel = nodeLabelMap[parentId] || parentId;
++                            return (
++                                <motion.div
++                                    key={childId}
++                                    initial={{ opacity: 0, y: 10 }}
++                                    animate={{ opacity: 1, y: 0 }}
++                                    className="flex-shrink-0 px-2 h-9 rounded bg-indigo-50 border border-indigo-200 flex items-center justify-center text-xs font-medium text-indigo-700 whitespace-nowrap"
++                                >
++                                    {childLabel} ΓåÆ {parentLabel}
++                                </motion.div>
++                            );
++                        })}
++                    </AnimatePresence>
++                    {Object.keys(parent).length === 0 && <div className="text-gray-400 text-sm italic w-full text-center mt-2">No parents recorded</div>}
++                </div>
++            </div>
++
++            {/* Visited Array */}
++            <div className="relative h-12 w-full border-t border-gray-100 pt-2">
++                <div className="absolute top-1 left-0 text-xs font-bold text-gray-400 uppercase tracking-wider">
++                    Visited Order
++                </div>
++                <div className="flex items-center gap-1 w-full mt-4 overflow-x-auto px-2 scrollbar-hide">
++                    {visited.map((nodeId, i) => {
++                        const label = nodeLabelMap[nodeId] || nodeId;
++                        return (
++                            <motion.div
++                                key={nodeId}
++                                initial={{ opacity: 0, scale: 0.5 }}
++                                animate={{ opacity: 1, scale: 1 }}
++                                className="flex-shrink-0 w-8 h-8 rounded bg-gray-100 border border-gray-300 flex items-center justify-center text-xs font-bold text-gray-600"
++                            >
++                                {label}
++                            </motion.div>
++                        );
++                    })}
++                    {visited.length === 0 && <div className="text-gray-400 text-sm italic w-full text-center">No nodes visited</div>}
++                </div>
++            </div>
++
++            {/* Components Array (for SCC) */}
++            {selectedAlgorithm === 'scc' && (
++                <div className="relative h-16 w-full border-t border-gray-100 pt-2">
++                    <div className="absolute top-1 left-0 text-xs font-bold text-gray-400 uppercase tracking-wider">
++                        Components ({components?.length || 0})
+                     </div>
+-                    <span className="text-xs text-blue-600 font-mono select-none">
+-                        {activeDS.length} items
+-                    </span>
++                    <div className="flex items-center gap-2 w-full mt-5 overflow-x-auto px-2 scrollbar-hide">
++                        <AnimatePresence>
++                            {components?.map((comp, index) => (
++                                <motion.div
++                                    key={index}
++                                    initial={{ opacity: 0, scale: 0.5 }}
++                                    animate={{ opacity: 1, scale: 1 }}
++                                    className="flex-shrink-0 px-2 py-1 rounded bg-purple-100 border border-purple-300 flex items-center gap-1"
++                                >
++                                    <span className="text-xs font-bold text-purple-700 mr-1">C{index + 1}:</span>
++                                    {comp.map(nodeId => (
++                                        <span key={nodeId} className="text-xs font-medium text-purple-900">
++                                            {nodeLabelMap[nodeId] || nodeId}
++                                        </span>
++                                    ))}
++                                </motion.div>
++                            ))}
++                        </AnimatePresence>
++                        {(!components || components.length === 0) && <div className="text-gray-400 text-sm italic w-full text-center mt-2">No components found</div>}
++                    </div>
+                 </div>
+             )}
+-
+-            <div className="flex-1 overflow-y-auto relative flex flex-col cursor-move">
+-                {(selectedAlgorithm !== 'floydWarshall' && activeDS.length > 0) && (
+-                    <div className="overflow-x-auto border-b border-gray-50 shrink-0 min-h-[64px] scrollbar-hide">
+-                        {renderDSContent()}
+-                    </div>
+-                )}
+-
+-                <div className="shrink-0 flex flex-col">
+-                    {renderInternalState()}
+-                </div>
+-            </div>
+         </motion.div>
+     );
+ };

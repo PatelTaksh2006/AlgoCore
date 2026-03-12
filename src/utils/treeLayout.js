@@ -1,6 +1,6 @@
 export function calculateTreeLayout(nodes, edges, rootId) {
-    // Filter only tree edges
-    const treeEdges = edges.filter(e => e.classification === 'tree');
+    // Filter tree edges and explicit solution path edges.
+    const treeEdges = edges.filter(e => e.classification === 'tree' || e.classification === 'solution');
     if (treeEdges.length === 0 && !rootId) return {};
 
     // Build adjacency for tree
@@ -8,16 +8,14 @@ export function calculateTreeLayout(nodes, edges, rootId) {
     nodes.forEach(n => adj[n.id] = []);
     treeEdges.forEach(e => {
         adj[e.source].push(e.target);
-        // Tree is directed from root in our traversal usually
+        adj[e.target].push(e.source); // Treat as undirected for layout
     });
 
-    // Find root if not provided (node with no incoming tree edges, but source of some?)
-    // Or just use the Algorithm's start node if we knew it. 
-    // For now, assume rootId is passed or we find a node with 0 incoming tree edges.
+    // Find root if not provided
     if (!rootId) {
-        const hasIncoming = new Set(treeEdges.map(e => e.target));
-        const roots = nodes.filter(n => !hasIncoming.has(n.id) && (adj[n.id]?.length > 0 || treeEdges.length === 0));
-        rootId = roots[0]?.id || nodes[0]?.id; // Fallback
+        const treeNodes = new Set();
+        treeEdges.forEach(e => { treeNodes.add(e.source); treeNodes.add(e.target); });
+        rootId = nodes.find(n => treeNodes.has(n.id))?.id || nodes[0]?.id;
     }
 
     // Assign levels using BFS
@@ -29,17 +27,23 @@ export function calculateTreeLayout(nodes, edges, rootId) {
         const { id, level } = queue.shift();
 
         const children = adj[id] || [];
-        if (children.length > 0) {
-            if (!levelNodes[level + 1]) levelNodes[level + 1] = [];
-            children.forEach(childId => {
-                if (!visited.has(childId)) {
-                    visited.add(childId);
-                    levelNodes[level + 1].push(childId);
-                    queue.push({ id: childId, level: level + 1 });
-                }
-            });
-        }
+        children.forEach(childId => {
+            if (!visited.has(childId)) {
+                visited.add(childId);
+                if (!levelNodes[level + 1]) levelNodes[level + 1] = [];
+                levelNodes[level + 1].push(childId);
+                queue.push({ id: childId, level: level + 1 });
+            }
+        });
     }
+
+    // Add any unvisited nodes to level 0 (disconnected components)
+    nodes.forEach(n => {
+        if (!visited.has(n.id)) {
+            levelNodes[0].push(n.id);
+            visited.add(n.id);
+        }
+    });
 
     // Assign positions
     // Simple approach: Center at Width/2.

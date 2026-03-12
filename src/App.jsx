@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import GraphCanvas from './components/GraphCanvas';
 import Sidebar from './components/Sidebar';
-import ResultTree from './components/ResultTree';
 import RoutingTable from './components/RoutingTable';
-import LsrPanel from './components/LsrPanel';
+import ResultPanel from './components/ResultPanel';
 import DataStructurePanel from './components/DataStructurePanel';
 import { useAlgorithm } from './context/AlgorithmContext';
 
@@ -27,13 +26,7 @@ function App() {
               <GraphCanvas />
             </div>
             <div className="flex-1 relative border-l border-gray-200 bg-gray-50 overflow-hidden transition-all duration-500" id="result-panel">
-              {selectedAlgorithm === 'distanceVector' ? <RoutingTable /> :
-                selectedAlgorithm === 'linkState' ? (
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1 min-h-[50%] border-b border-gray-200"><LsrPanel /></div>
-                    <div className="flex-1 min-h-[50%]"><RoutingTable /></div>
-                  </div>
-                ) : <ResultTree />}
+              {selectedAlgorithm === 'distanceVector' || selectedAlgorithm === 'linkState' ? <RoutingTable /> : <ResultPanel />}
             </div>
           </div>
         </div>

@@ -190,7 +190,7 @@ export function* bfs(nodes, edges, startNodeId) {
     yield { type: 'SET_LINE', lineIndex: -1 };
 }
 
-export function* dijkstra(nodes, edges, startNodeId) {
+export function* dijkstra(nodes, edges, startNodeId, targetNodeId) {
     const adjMap = {};
     nodes.forEach(n => adjMap[n.id] = []);
     edges.forEach(e => {
@@ -242,6 +242,68 @@ export function* dijkstra(nodes, edges, startNodeId) {
         yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6' };
         yield { type: 'LOG', message: `Processing ${nodes.find(n => n.id === u)?.label} (dist: ${uDist})` };
 
+        // Check for Target
+        if (targetNodeId && u === targetNodeId) {
+            yield { type: 'LOG', message: `Target Reached! Distance: ${uDist}` };
+
+            // Backtrack to build explicit path data
+            const pathNodes = [];
+            const pathEdges = [];
+            
+            let curr = targetNodeId;
+            while (curr !== startNodeId && curr !== null) {
+                pathNodes.push(curr);
+                const p = prev[curr];
+                if (p !== null) {
+                    const edge = edges.find(e => 
+                        (e.source === p && e.target === curr) || 
+                        (e.source === curr && e.target === p)
+                    );
+                    if (edge) {
+                        pathEdges.push(edge);
+                    }
+                }
+                curr = p;
+            }
+            if (curr === startNodeId) {
+                pathNodes.push(startNodeId);
+            }
+            
+            // Reverse so it reads from start -> target
+            pathNodes.reverse();
+            pathEdges.reverse();
+
+            console.log("DIJKSTRA_TRACE: Final Path Extracted", {
+                startNodeId, targetNodeId, 
+                pathNodesCount: pathNodes.length, 
+                pathEdgesCount: pathEdges.length,
+                pathNodes, pathEdges
+            });
+
+            // Keep explored tree edges visible; only reset node colors for clear final emphasis.
+            for (const n of nodes) {
+                yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
+            }
+
+            // Highlight path edges in green
+            for (const pe of pathEdges) {
+                yield { type: 'CLASSIFY_EDGE', edgeId: pe.id, classification: 'solution' };
+            }
+            // Highlight path nodes in green
+            for (const pn of pathNodes) {
+                yield { type: 'SET_NODE_COLOR', nodeId: pn, color: '#22c55e' };
+            }
+
+            yield { 
+                type: 'SET_RESULT_DATA', 
+                data: { type: 'dijkstraPath', pathNodes, pathEdges } 
+            };
+
+            yield { type: 'LOG', message: `Shortest path: ${pathNodes.map(id => nodes.find(n => n.id === id)?.label).join(' → ')}` };
+            yield { type: 'SET_LINE', lineIndex: -1 };
+            return; // Stop algorithm
+        }
+
         if (prev[u]) {
             const parent = prev[u];
             const edge = adjMap[parent].find(e => e.to === u);
@@ -291,6 +353,8 @@ export function* dijkstra(nodes, edges, startNodeId) {
         // Loop Line 2
         yield { type: 'SET_LINE', lineIndex: 2 };
     }
+
+    yield { type: 'LOG', message: 'Dijkstra Completed' };
     yield { type: 'SET_LINE', lineIndex: -1 };
 }
 
@@ -405,7 +469,8 @@ export function* kruskal(nodes, edges) {
 
     function find(i) {
         if (parent[i] === i) return i;
-        return find(parent[i]);
+        parent[i] = find(parent[i]);
+        return parent[i];
     }
 
     function union(i, j) {
@@ -442,6 +507,8 @@ export function* kruskal(nodes, edges) {
             yield { type: 'SET_LINE', lineIndex: 4 };
 
             yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' };
+            yield { type: 'SET_NODE_COLOR', nodeId: edge.source, color: '#3b82f6' };
+            yield { type: 'SET_NODE_COLOR', nodeId: edge.target, color: '#3b82f6' };
             yield { type: 'LOG', message: `Added to MST` };
 
             // Kruskal doesn't use "Visited" in same way, but we could mark nodes as visited when added to MST set?
@@ -481,6 +548,7 @@ export function* scc(nodes, edges, startNodeId) {
     const onStack = {};
     const stack = [];
     const visited = {}; // Standard visited tracking using context
+    const allComponents = [];
 
     let idCounter = 0;
 
@@ -549,6 +617,7 @@ export function* scc(nodes, edges, startNodeId) {
                 yield { type: 'SET_NODE_COLOR', nodeId: node, color: '#3b82f6' }; // Finished (Blue)
             } while (node !== at);
 
+            allComponents.push(component);
             yield { type: 'DS_UPDATE', data: [...stack], action: 'replace' };
             yield { type: 'FOUND_COMPONENT', component: component };
             yield { type: 'LOG', message: `Found SCC: ${component.length} nodes` };
@@ -569,6 +638,15 @@ export function* scc(nodes, edges, startNodeId) {
             yield* dfs(node.id);
         }
     }
+
+    yield {
+        type: 'SET_RESULT_DATA',
+        data: {
+            type: 'scc',
+            sccs: allComponents,
+            originalGraph: { nodes, edges }
+        }
+    };
 
     yield { type: 'SET_LINE', lineIndex: -1 };
     yield { type: 'LOG', message: "SCC Completed" };
@@ -888,6 +966,185 @@ export function* linkState(nodes, edges) {
     yield { type: 'SET_LINE', lineIndex: -1 };
 }
 
+export function* floydWarshall(nodes, edges) {
+    const adjMap = {};
+    nodes.forEach(n => adjMap[n.id] = []);
+    edges.forEach(e => {
+        adjMap[e.source].push({ to: e.target, id: e.id, weight: e.weight });
+        // Assume graph is handled correctly by the UI whether directed or undirected
+        if (e.type === 'undirected') {
+            adjMap[e.target].push({ to: e.source, id: e.id, weight: e.weight });
+        }
+    });
+
+    const dist = {};
+    const next = {};
+
+    // Initialize matrices
+    for (const u of nodes) {
+        dist[u.id] = {};
+        next[u.id] = {};
+        for (const v of nodes) {
+            if (u.id === v.id) {
+                dist[u.id][v.id] = 0;
+                next[u.id][v.id] = u.id;
+            } else {
+                dist[u.id][v.id] = Infinity;
+                next[u.id][v.id] = null;
+            }
+        }
+    }
+
+    // Add edges
+    for (const e of edges) {
+        const w = Number(e.weight) || 1;
+        dist[e.source][e.target] = Math.min(dist[e.source][e.target], w);
+        next[e.source][e.target] = e.target;
+        if (e.type === 'undirected') {
+            dist[e.target][e.source] = Math.min(dist[e.target][e.source], w);
+            next[e.target][e.source] = e.source;
+        }
+    }
+
+    yield { type: 'LOG', message: `Floyd-Warshall Initialization Complete`, internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: null, i: null, j: null } } };
+    yield { type: 'SET_LINE', lineIndex: 0 };
+
+    for (const k of nodes) {
+        let updatedInK = false;
+
+        yield { type: 'SET_NODE_COLOR', nodeId: k.id, color: '#fbbf24', internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: k.id, i: null, j: null } } };
+
+        for (const i of nodes) {
+            for (const j of nodes) {
+                if (dist[i.id][k.id] !== Infinity && dist[k.id][j.id] !== Infinity && dist[i.id][j.id] > dist[i.id][k.id] + dist[k.id][j.id]) {
+                    dist[i.id][j.id] = dist[i.id][k.id] + dist[k.id][j.id];
+                    next[i.id][j.id] = next[i.id][k.id];
+                    updatedInK = true;
+                    yield {
+                        type: 'LOG',
+                        message: `Updated path: ${i.label} -> ${j.label} via ${k.label} (dist: ${dist[i.id][j.id]})`,
+                        internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: k.id, i: i.id, j: j.id } }
+                    };
+                }
+            }
+        }
+        if (!updatedInK) {
+            yield {
+                type: 'LOG',
+                message: `Checked intermediate node ${k.label} (no shorter paths found)`,
+                internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: k.id, i: null, j: null } }
+            };
+        }
+
+        yield { type: 'SET_NODE_COLOR', nodeId: k.id, color: '#3b82f6', internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: null, i: null, j: null } } };
+        yield { type: 'SET_LINE', lineIndex: 1 };
+    }
+
+    yield { type: 'LOG', message: `Floyd-Warshall Completed`, internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), activeNodes: { k: null, i: null, j: null } } };
+    yield { type: 'SET_LINE', lineIndex: -1 };
+}
+
+export function* articulationPoints(nodes, edges) {
+    const adjMap = {};
+    nodes.forEach(n => adjMap[n.id] = []);
+    edges.forEach(e => {
+        adjMap[e.source].push(e.target);
+        adjMap[e.target].push(e.source); // AP is always for undirected graph conceptually
+    });
+
+    const discovery = {};
+    const low = {};
+    const parent = {};
+    const ap = new Set();
+    const visited = new Set();
+    let time = 0;
+
+    // Visualization State
+    const internalState = {
+        lowLink: {},
+        discovery: {},
+        visited: [],
+        ap: [] // List of current APs
+    };
+
+    for (const n of nodes) {
+        discovery[n.id] = -1;
+        low[n.id] = -1;
+        parent[n.id] = null;
+        yield { type: 'SET_NODE_COLOR', nodeId: n.id, color: undefined };
+    }
+
+    function* dfs(u) {
+        let children = 0;
+        time++;
+        discovery[u] = low[u] = time;
+        visited.add(u);
+
+        internalState.discovery = { ...discovery };
+        internalState.lowLink = { ...low };
+        internalState.visited = [...visited];
+
+        yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#fbbf24', internalState: { ...internalState } };
+        yield { type: 'LOG', message: `Visited ${nodes.find(n => n.id === u)?.label}`, internalState: { ...internalState } };
+
+        const neighbors = adjMap[u] || [];
+        for (const v of neighbors) {
+            if (v === parent[u]) continue;
+
+            if (visited.has(v)) {
+                low[u] = Math.min(low[u], discovery[v]);
+                internalState.lowLink = { ...low };
+                yield { type: 'LOG', message: `Back-edge to ${nodes.find(n => n.id === v)?.label}. Low: ${low[u]}`, internalState: { ...internalState } };
+            } else {
+                children++;
+                parent[v] = u;
+                yield* dfs(v);
+
+                low[u] = Math.min(low[u], low[v]);
+                internalState.lowLink = { ...low };
+
+                if (parent[u] !== null && low[v] >= discovery[u]) {
+                    ap.add(u);
+                    internalState.ap = [...ap];
+                    yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#f97316', internalState: { ...internalState } }; // Orange for AP
+                    yield { type: 'LOG', message: `Articulation Point found: ${nodes.find(n => n.id === u)?.label}`, internalState: { ...internalState } };
+                }
+            }
+        }
+
+        if (parent[u] === null && children > 1) {
+            ap.add(u);
+            internalState.ap = [...ap];
+            yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#f97316', internalState: { ...internalState } };
+            yield { type: 'LOG', message: `Root Articulation Point: ${nodes.find(n => n.id === u)?.label}`, internalState: { ...internalState } };
+        }
+
+        // If not AP, set to processed color
+        if (!ap.has(u)) {
+            yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#3b82f6', internalState: { ...internalState } };
+        }
+    }
+
+    yield { type: 'SET_LINE', lineIndex: 0 };
+    for (const n of nodes) {
+        if (!visited.has(n.id)) {
+            yield* dfs(n.id);
+        }
+    }
+
+    yield {
+        type: 'SET_RESULT_DATA',
+        data: {
+            type: 'ap',
+            points: [...ap],
+            originalGraph: { nodes, edges }
+        }
+    };
+
+    yield { type: 'LOG', message: `AP Discovery Completed. Found ${ap.size} points.` };
+    yield { type: 'SET_LINE', lineIndex: -1 };
+}
+
 export const algorithms = {
     dfs,
     bfs,
@@ -896,5 +1153,7 @@ export const algorithms = {
     kruskal,
     scc,
     distanceVector,
-    linkState
+    linkState,
+    floydWarshall,
+    articulationPoints
 };

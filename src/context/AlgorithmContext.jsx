@@ -14,6 +14,8 @@ export const AlgorithmProvider = ({ children }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [speed, setSpeed] = useState(1000); // ms
     const [currentStep, setCurrentStep] = useState(0);
+    const [startNodeId, setStartNodeId] = useState(null); // Added startNodeId state
+    const [targetNodeId, setTargetNodeId] = useState(null); // Added targetNodeId state
     const [history, setHistory] = useState([]);
     const [logs, setLogs] = useState([]);
     const [currentLine, setCurrentLine] = useState(-1);
@@ -54,17 +56,29 @@ export const AlgorithmProvider = ({ children }) => {
             return;
         }
 
-        const startNodeId = nodes[0]?.id;
-        console.log("Algorithm: Starting", { selectedAlgorithm, startNodeId, nodesCount: nodes.length });
+        const evaluatedStartNode = startNodeId || nodes[0]?.id;
+        let evaluatedTargetNode = targetNodeId;
+
+        // Dijkstra needs a concrete destination to show one final shortest path in green.
+        if (selectedAlgorithm === 'dijkstra' && !evaluatedTargetNode) {
+            evaluatedTargetNode = nodes.find(n => n.id !== evaluatedStartNode)?.id || null;
+        }
+
+        console.log("Algorithm: Starting", {
+            selectedAlgorithm,
+            startNodeId: evaluatedStartNode,
+            targetNodeId: evaluatedTargetNode,
+            nodesCount: nodes.length
+        });
 
         const algoFunc = algorithms[selectedAlgorithm];
         if (algoFunc) {
-            generatorRef.current = algoFunc(nodes, edges, startNodeId);
+            generatorRef.current = algoFunc(nodes, edges, evaluatedStartNode, evaluatedTargetNode);
             console.log("Algorithm: Generator created");
         } else {
             console.error("Algorithm: Function not found for", selectedAlgorithm);
         }
-    }, [nodes, edges, selectedAlgorithm, resetAlgorithm]);
+    }, [nodes, edges, selectedAlgorithm, startNodeId, targetNodeId, resetAlgorithm]);
 
     const applyStep = useCallback((stepData) => {
         if (!stepData) return;
@@ -107,6 +121,8 @@ export const AlgorithmProvider = ({ children }) => {
             useGraphStore.getState().setActiveTableNodeId(stepData.nodeId);
         } else if (stepData.type === 'ADD_LSA') {
             useGraphStore.getState().addLsa(stepData.lsa);
+        } else if (stepData.type === 'SET_RESULT_DATA') {
+            useGraphStore.getState().setResultData(stepData.data);
         }
     }, [setEdgeClassification, setNodeColor, updateDS, addBackEdge, setCurrentLine, setVisited, setParent, setComponents]);
 
@@ -130,6 +146,9 @@ export const AlgorithmProvider = ({ children }) => {
                 // Apply log/visuals immediately
                 if (value.type === 'LOG') {
                     setLogs(prev => [...prev, value.message]);
+                }
+                if (value.internalState) {
+                    useGraphStore.getState().setInternalState(value.internalState);
                 }
                 applyStep(value);
 
@@ -191,6 +210,8 @@ export const AlgorithmProvider = ({ children }) => {
             selectedAlgorithm, setSelectedAlgorithm,
             isPlaying, setIsPlaying,
             speed, setSpeed,
+            startNodeId, setStartNodeId,
+            targetNodeId, setTargetNodeId,
             currentStep, history, logs,
             currentLine, visited, parent, components,
             runAlgorithm, nextStep, prevStep, resetAlgorithm
