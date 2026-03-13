@@ -9,7 +9,7 @@ const AlgorithmContext = createContext();
 export const useAlgorithm = () => useContext(AlgorithmContext);
 
 export const AlgorithmProvider = ({ children }) => {
-    const { nodes, edges, clearClassification, setEdgeClassification, setNodeColor } = useGraph();
+    const { nodes, edges, isDirected, clearClassification, setEdgeClassification, setNodeColor } = useGraph();
     const [selectedAlgorithm, setSelectedAlgorithm] = useState('dfs');
     const [isPlaying, setIsPlaying] = useState(false);
     const [speed, setSpeed] = useState(1000); // ms
@@ -56,7 +56,9 @@ export const AlgorithmProvider = ({ children }) => {
             return;
         }
 
-        const evaluatedStartNode = startNodeId || nodes[0]?.id;
+        const evaluatedStartNode = selectedAlgorithm === 'kruskal' || selectedAlgorithm === 'scc'
+            ? null
+            : (startNodeId || nodes[0]?.id);
         let evaluatedTargetNode = targetNodeId;
 
         // Dijkstra needs a concrete destination to show one final shortest path in green.
@@ -73,12 +75,16 @@ export const AlgorithmProvider = ({ children }) => {
 
         const algoFunc = algorithms[selectedAlgorithm];
         if (algoFunc) {
-            generatorRef.current = algoFunc(nodes, edges, evaluatedStartNode, evaluatedTargetNode);
+            const normalizedEdges = edges.map(edge => ({
+                ...edge,
+                directed: isDirected,
+            }));
+            generatorRef.current = algoFunc(nodes, normalizedEdges, evaluatedStartNode, evaluatedTargetNode);
             console.log("Algorithm: Generator created");
         } else {
             console.error("Algorithm: Function not found for", selectedAlgorithm);
         }
-    }, [nodes, edges, selectedAlgorithm, startNodeId, targetNodeId, resetAlgorithm]);
+    }, [nodes, edges, isDirected, selectedAlgorithm, startNodeId, targetNodeId, resetAlgorithm]);
 
     const applyStep = useCallback((stepData) => {
         if (!stepData) return;

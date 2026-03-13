@@ -168,5 +168,22 @@ export const SAMPLES = {
             { id: 'e7', source: 'node-2', target: 'node-5', weight: 10 },
             { id: 'e8', source: 'node-3', target: 'node-4', weight: 10 }
         ]
+    },
+    floydWarshall: {
+        isDirected: true,
+        nodes: [
+            { id: 'node-1', label: 'A', x: 120, y: 80 },
+            { id: 'node-2', label: 'B', x: 320, y: 80 },
+            { id: 'node-3', label: 'C', x: 120, y: 260 },
+            { id: 'node-4', label: 'D', x: 320, y: 260 }
+        ],
+        edges: [
+            { id: 'e1', source: 'node-1', target: 'node-2', weight: 3 },
+            { id: 'e2', source: 'node-1', target: 'node-3', weight: 8 },
+            { id: 'e3', source: 'node-2', target: 'node-3', weight: 2 },
+            { id: 'e4', source: 'node-2', target: 'node-4', weight: 5 },
+            { id: 'e5', source: 'node-3', target: 'node-4', weight: 1 },
+            { id: 'e6', source: 'node-4', target: 'node-1', weight: 7 }
+        ]
     }
 };

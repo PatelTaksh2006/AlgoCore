@@ -1,8 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import useGraphStore from '../store/useGraphStore';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls, useMotionValue } from 'framer-motion';
 import { useAlgorithm } from '../context/AlgorithmContext';
 import { useGraph } from '../context/GraphContext';
+
+const PANEL_MARGIN = 16;
+const MIN_PANEL_WIDTH = 420;
+const MIN_PANEL_HEIGHT = 220;
+const DEFAULT_PANEL_HEIGHT = 360;
 
 // Helper sub-component for AP algorithm state
 const APStateTable = ({ internalState, nodeLabelMap }) => {
@@ -184,6 +189,10 @@ const DataStructurePanel = ({ constraintsRef }) => {
     const { activeDS, internalState, lsdb, routingTable, activeTableNodeId } = useGraphStore();
     const { selectedAlgorithm, visited, parent, components } = useAlgorithm();
     const { nodes } = useGraph();
+    const resizeStateRef = useRef(null);
+    const hasPositionedRef = useRef(false);
+    const hasManualResizeRef = useRef(false);
+    const dragControls = useDragControls();
 
     // Determine type for label
     const getTypeLabel = () => {
@@ -206,17 +215,187 @@ const DataStructurePanel = ({ constraintsRef }) => {
     }, [nodes]);
 
     // Determine panel width based on algorithm
-    const panelWidth = isFloydWarshall ? 'w-[700px]' : 'w-[600px]';
+    const defaultPanelWidth = isFloydWarshall ? 700 : 600;
+    const [panelSize, setPanelSize] = useState({ width: defaultPanelWidth, height: DEFAULT_PANEL_HEIGHT });
+    const x = useMotionValue(PANEL_MARGIN);
+    const y = useMotionValue(PANEL_MARGIN);
+
+    const clampPosition = useCallback((nextX, nextY, size = panelSize) => {
+        const container = constraintsRef?.current;
+        if (!container) {
+            return { x: nextX, y: nextY };
+        }
+
+        const maxX = Math.max(PANEL_MARGIN, container.clientWidth - size.width - PANEL_MARGIN);
+        const maxY = Math.max(PANEL_MARGIN, container.clientHeight - size.height - PANEL_MARGIN);
+
+        return {
+            x: Math.min(Math.max(PANEL_MARGIN, nextX), maxX),
+            y: Math.min(Math.max(PANEL_MARGIN, nextY), maxY),
+        };
+    }, [constraintsRef, panelSize]);
+
+    const clampSize = useCallback((nextWidth, nextHeight, position = { x: x.get(), y: y.get() }) => {
+        const container = constraintsRef?.current;
+        if (!container) {
+            return {
+                width: Math.max(MIN_PANEL_WIDTH, nextWidth),
+                height: Math.max(MIN_PANEL_HEIGHT, nextHeight),
+            };
+        }
+
+        const maxWidth = Math.max(MIN_PANEL_WIDTH, container.clientWidth - position.x - PANEL_MARGIN);
+        const maxHeight = Math.max(MIN_PANEL_HEIGHT, container.clientHeight - position.y - PANEL_MARGIN);
+
+        return {
+            width: Math.min(Math.max(MIN_PANEL_WIDTH, nextWidth), maxWidth),
+            height: Math.min(Math.max(MIN_PANEL_HEIGHT, nextHeight), maxHeight),
+        };
+    }, [constraintsRef, x, y]);
+
+    const syncPanelWithinViewport = useCallback((size = panelSize) => {
+        const boundedSize = clampSize(size.width, size.height);
+        const nextSize = boundedSize.width === size.width && boundedSize.height === size.height ? size : boundedSize;
+
+        if (nextSize !== size) {
+            setPanelSize(current => (
+                current.width === nextSize.width && current.height === nextSize.height ? current : nextSize
+            ));
+        }
+
+        const boundedPosition = clampPosition(x.get(), y.get(), nextSize);
+        x.set(boundedPosition.x);
+        y.set(boundedPosition.y);
+    }, [clampPosition, clampSize, panelSize, x, y]);
+
+    useLayoutEffect(() => {
+        const container = constraintsRef?.current;
+        if (!container) {
+            return;
+        }
+
+        const preferredSize = hasManualResizeRef.current
+            ? panelSize
+            : clampSize(defaultPanelWidth, DEFAULT_PANEL_HEIGHT);
+
+        if (!hasManualResizeRef.current && (
+            preferredSize.width !== panelSize.width ||
+            preferredSize.height !== panelSize.height
+        )) {
+            setPanelSize(preferredSize);
+        }
+
+        if (!hasPositionedRef.current) {
+            const startX = Math.max(PANEL_MARGIN, (container.clientWidth - preferredSize.width) / 2);
+            const startY = Math.max(PANEL_MARGIN, container.clientHeight - preferredSize.height - PANEL_MARGIN);
+            x.set(startX);
+            y.set(startY);
+            hasPositionedRef.current = true;
+            return;
+        }
+
+        const boundedPosition = clampPosition(x.get(), y.get(), preferredSize);
+        x.set(boundedPosition.x);
+        y.set(boundedPosition.y);
+    }, [clampPosition, clampSize, constraintsRef, defaultPanelWidth, panelSize, x, y]);
+
+    useEffect(() => {
+        const container = constraintsRef?.current;
+        if (!container) {
+            return undefined;
+        }
+
+        const observer = new ResizeObserver(() => {
+            syncPanelWithinViewport();
+        });
+
+        observer.observe(container);
+
+        return () => observer.disconnect();
+    }, [constraintsRef, syncPanelWithinViewport]);
+
+    const stopResizing = useCallback(() => {
+        resizeStateRef.current = null;
+        window.removeEventListener('pointermove', handleResizeMove);
+        window.removeEventListener('pointerup', stopResizing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const handleResizeMove = useCallback((event) => {
+        const resizeState = resizeStateRef.current;
+        if (!resizeState) {
+            return;
+        }
+
+        const nextWidth = resizeState.startWidth + (event.clientX - resizeState.startX);
+        const nextHeight = resizeState.startHeight + (event.clientY - resizeState.startY);
+        const boundedSize = clampSize(nextWidth, nextHeight, {
+            x: resizeState.startPanelX,
+            y: resizeState.startPanelY,
+        });
+
+        setPanelSize(current => (
+            current.width === boundedSize.width && current.height === boundedSize.height ? current : boundedSize
+        ));
+    }, [clampSize]);
+
+    useEffect(() => {
+        return () => {
+            window.removeEventListener('pointermove', handleResizeMove);
+            window.removeEventListener('pointerup', stopResizing);
+        };
+    }, [handleResizeMove, stopResizing]);
+
+    const startResizing = useCallback((event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        hasManualResizeRef.current = true;
+        resizeStateRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            startWidth: panelSize.width,
+            startHeight: panelSize.height,
+            startPanelX: x.get(),
+            startPanelY: y.get(),
+        };
+
+        window.addEventListener('pointermove', handleResizeMove);
+        window.addEventListener('pointerup', stopResizing);
+    }, [handleResizeMove, panelSize.height, panelSize.width, stopResizing, x, y]);
 
     return (
         <motion.div
             drag
+            dragControls={dragControls}
+            dragListener={false}
             dragConstraints={constraintsRef}
             dragMomentum={false}
-            initial={{ x: "-50%", y: 0 }}
-            style={{ left: "50%", bottom: "1rem" }}
-            className={`absolute bg-white/90 backdrop-blur-md rounded-xl shadow-lg border border-gray-200 p-4 ${panelWidth} flex flex-col gap-4 z-20 cursor-move max-h-[60vh] overflow-y-auto`}
+            dragElastic={0.04}
+            whileDrag={{ scale: 1.01, boxShadow: '0 24px 48px rgba(15, 23, 42, 0.18)' }}
+            onDragEnd={() => syncPanelWithinViewport()}
+            style={{
+                x,
+                y,
+                left: 0,
+                top: 0,
+                width: panelSize.width,
+                height: panelSize.height,
+                willChange: 'transform',
+            }}
+            className="absolute bg-white/92 backdrop-blur-md rounded-xl shadow-lg border border-gray-200 p-3 flex flex-col gap-3 z-20 overflow-hidden touch-none"
         >
+            <div
+                onPointerDown={(event) => dragControls.start(event)}
+                className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 cursor-grab active:cursor-grabbing select-none"
+                style={{ touchAction: 'none' }}
+            >
+                <div>
+                    <div className="text-[11px] font-bold tracking-[0.18em] uppercase text-gray-500">Data Structure Panel</div>
+                    <div className="text-xs text-gray-400">Drag from this bar. Resize from the bottom-right corner.</div>
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
 
             {/* Primary Data Structure (Stack/Queue) */}
             <div className="relative h-16 w-full">
@@ -351,6 +530,16 @@ const DataStructurePanel = ({ constraintsRef }) => {
                     selectedAlgorithm={selectedAlgorithm}
                 />
             )}
+            </div>
+
+            <button
+                type="button"
+                aria-label="Resize data structure panel"
+                onPointerDown={startResizing}
+                className="absolute bottom-2 right-2 h-5 w-5 cursor-se-resize rounded-sm bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400"
+            >
+                <span className="pointer-events-none absolute bottom-1 right-1 h-2.5 w-2.5 border-b-2 border-r-2 border-white/90" />
+            </button>
         </motion.div>
     );
 };

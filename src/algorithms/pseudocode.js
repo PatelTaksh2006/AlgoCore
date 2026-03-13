@@ -62,6 +62,17 @@ export const PSEUDOCODE = {
         "  if ids[u] == low[u]:",
         "    pop from stack until u (new SCC)"
     ],
+    articulationPoints: [
+        "function ArticulationPoints(G):",               // 0
+        "  visit u: discovery[u] = low[u] = ++time",     // 1
+        "  for each neighbor v of u:",                   // 2
+        "    if v is already visited (back edge):",      // 3
+        "      low[u] = min(low[u], discovery[v])",      // 4
+        "    else DFS(v), then low[u] = min(low[u], low[v])", // 5
+        "    if u is non-root and low[v] >= discovery[u]: u is AP", // 6
+        "  if u is root and has >1 DFS children: u is AP", // 7
+        "  mark u processed"                              // 8
+    ],
     distanceVector: [
         "function DistanceVector(N):",       // 0
         "  Loop until converged (or N-1):",  // 1

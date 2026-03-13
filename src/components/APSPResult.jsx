@@ -3,10 +3,12 @@ import useGraphStore from '../store/useGraphStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useGraph } from '../context/GraphContext';
+import { useAlgorithm } from '../context/AlgorithmContext';
 
 const APSPResult = () => {
     const { internalState } = useGraphStore();
     const { nodes } = useGraph();
+    const { startNodeId } = useAlgorithm();
 
     // internalState for FW contains: matrix, next, activeNodes
     const matrix = internalState?.matrix;
@@ -20,18 +22,38 @@ const APSPResult = () => {
         const nodeMap = {};
         nodes.forEach(n => { nodeMap[n.id] = n; });
 
-        for (const u of nodes) {
+        const orderedNodes = startNodeId
+            ? [
+                ...nodes.filter(node => node.id === startNodeId),
+                ...nodes.filter(node => node.id !== startNodeId),
+            ]
+            : nodes;
+
+        for (const u of orderedNodes) {
             const treeEdges = [];
             const treeNodes = new Set([u.id]);
+
+            const matrixRow = matrix[u.id];
+            if (!matrixRow) {
+                trees.push({
+                    sourceId: u.id,
+                    sourceLabel: u.label,
+                    nodes: Array.from(treeNodes),
+                    edges: [],
+                    depths: { [u.id]: 0 },
+                    maxDepth: 0
+                });
+                continue;
+            }
 
             // Reconstruct paths from u to all other reachable nodes v
             for (const v of nodes) {
                 if (u.id === v.id) continue;
 
-                if (matrix[u.id][v.id] !== Infinity) {
+                if (matrixRow[v.id] !== undefined && matrixRow[v.id] !== Infinity) {
                     let curr = u.id;
                     while (curr !== v.id && curr !== null) {
-                        if (!nextNode[curr]) break;
+                        if (!nextNode[curr] || !nextNode[curr][v.id]) break;
                         const nxt = nextNode[curr][v.id];
                         if (nxt === null) break;
 
@@ -85,7 +107,7 @@ const APSPResult = () => {
         }
 
         return trees;
-    }, [matrix, nextNode, nodes]);
+    }, [matrix, nextNode, nodes, startNodeId]);
 
 
     if (!matrix) {

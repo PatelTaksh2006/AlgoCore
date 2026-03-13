@@ -7,10 +7,78 @@ import { useAlgorithm } from '../context/AlgorithmContext';
 // eslint-disable-next-line no-unused-vars
 import { motion } from 'framer-motion';
 
+const getTreeLegendConfig = (selectedAlgorithm) => {
+    switch (selectedAlgorithm) {
+        case 'dfs':
+            return [
+                { label: 'Traversal tree edge', color: '#2563eb' },
+                { label: 'Back edge', color: '#ef4444', dashed: true },
+                { label: 'Forward edge', color: '#16a34a', dashed: true },
+                { label: 'Cross edge', color: '#111827', dashed: true },
+            ];
+        case 'bfs':
+            return [
+                { label: 'BFS tree edge', color: '#2563eb' },
+                { label: 'Back edge to an ancestor', color: '#ef4444', dashed: true },
+                { label: 'Cross edge', color: '#111827', dashed: true },
+            ];
+        case 'dijkstra':
+            return [
+                { label: 'Explored shortest-path tree edge', color: '#2563eb' },
+                { label: 'Final shortest path to target', color: '#22c55e' },
+                { label: 'Back relation if present', color: '#ef4444', dashed: true },
+            ];
+        case 'prim':
+            return [
+                { label: 'Edge chosen for MST', color: '#2563eb' },
+            ];
+        case 'kruskal':
+            return [
+                { label: 'Edge added to MST', color: '#2563eb' },
+                { label: 'Rejected cycle edge', color: '#b91c1c', dashed: true },
+            ];
+        default:
+            return [];
+    }
+};
+
+const TreeEdgeLegend = ({ selectedAlgorithm }) => {
+    const items = getTreeLegendConfig(selectedAlgorithm);
+
+    if (items.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="pointer-events-none absolute bottom-4 right-4 z-20 w-72 max-w-[calc(100%-2rem)] rounded-xl border border-gray-200 bg-white/92 px-4 py-3 shadow-lg backdrop-blur-md">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">
+                Edge Legend
+            </div>
+            <div className="space-y-2">
+                {items.map((item) => (
+                    <div key={item.label} className="flex items-center gap-3 text-xs text-gray-600">
+                        <span className="block w-10 shrink-0">
+                            <span
+                                className="block w-full rounded-full"
+                                style={{
+                                    backgroundColor: item.dashed ? 'transparent' : item.color,
+                                    borderTop: item.dashed ? `2px dashed ${item.color}` : undefined,
+                                    height: item.dashed ? 0 : 2,
+                                }}
+                            />
+                        </span>
+                        <span>{item.label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const ResultTree = () => {
-    const { nodes, edges } = useGraph();
+    const { nodes, edges, isDirected } = useGraph();
     const { backEdges } = useGraphStore();
-    const { selectedAlgorithm, components } = useAlgorithm();
+    const { selectedAlgorithm, components, startNodeId } = useAlgorithm();
 
     const [manualPositions, setManualPositions] = useState({});
 
@@ -27,26 +95,28 @@ const ResultTree = () => {
         });
     };
 
-    // Filter nodes and edges involved in the tree
-    const treeEdges = edges.filter(e => e.classification === 'tree' || e.classification === 'solution');
+    const classifiedTreeEdges = useMemo(() => (
+        edges.filter(e => ['tree', 'solution', 'back', 'forward', 'cross', 'cycle'].includes(e.classification))
+    ), [edges]);
 
     const solutionNodeIds = useMemo(() => {
         const set = new Set();
-        treeEdges.forEach(e => {
+        classifiedTreeEdges.forEach(e => {
             if (e.classification === 'solution') {
                 set.add(e.source);
                 set.add(e.target);
             }
         });
         return set;
-    }, [treeEdges]);
+    }, [classifiedTreeEdges]);
 
     const { positions, labels } = useMemo(() => {
         if (selectedAlgorithm === 'scc') {
             return calculateSCCLayout(components, nodes);
         }
-        return { positions: calculateTreeLayout(nodes, edges), labels: [] };
-    }, [nodes, edges, selectedAlgorithm, components]);
+        const layoutRoot = selectedAlgorithm === 'kruskal' ? undefined : (startNodeId || undefined);
+        return { positions: calculateTreeLayout(nodes, edges, layoutRoot), labels: [] };
+    }, [nodes, edges, selectedAlgorithm, components, startNodeId]);
 
     // For SCC, show full graph edges and mark whether each edge is inside an SCC or between SCCs.
     const sccEdges = useMemo(() => {
@@ -73,15 +143,17 @@ const ResultTree = () => {
 
     const visibleNodes = nodes.filter(n => positions[n.id]);
     const hasTree = Object.keys(positions).length > 0;
+    const showDirectedArrows = selectedAlgorithm === 'scc' ? true : isDirected;
 
-    // Determine edges to render: Tree edges OR SCC edges
-    const edgesToRender = selectedAlgorithm === 'scc' ? sccEdges : treeEdges;
+    const edgesToRender = selectedAlgorithm === 'scc' ? sccEdges : classifiedTreeEdges;
 
     return (
         <div className="w-full h-full relative bg-gray-50 border-l border-gray-200 overflow-hidden">
             <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-gray-500 shadow-sm z-10">
                 RESULT TREE
             </div>
+
+            <TreeEdgeLegend selectedAlgorithm={selectedAlgorithm} />
 
             {!hasTree && (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
@@ -100,6 +172,12 @@ const ResultTree = () => {
                     <marker id="solution-arrow" markerWidth="10" markerHeight="7" refX="20" refY="3.5" orient="auto">
                         <polygon points="0 0, 10 3.5, 0 7" fill="#22c55e" />
                     </marker>
+                    <marker id="forward-arrow" markerWidth="10" markerHeight="7" refX="20" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a" />
+                    </marker>
+                    <marker id="cross-arrow" markerWidth="10" markerHeight="7" refX="20" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#111827" />
+                    </marker>
                     <marker id="scc-intra-arrow" markerWidth="10" markerHeight="7" refX="20" refY="3.5" orient="auto">
                         <polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed" />
                     </marker>
@@ -113,23 +191,40 @@ const ResultTree = () => {
                     if (!sourcePos || !targetPos) return null;
 
                     let strokeColor = "#2563eb";
-                    let markerEnd = "url(#tree-arrow)";
+                    let markerEnd = showDirectedArrows ? "url(#tree-arrow)" : undefined;
                     let strokeDasharray = undefined;
                     let strokeWidth = 2;
                     if (selectedAlgorithm === 'scc') {
                         if (edge.sccRelation === 'intra') {
                             strokeColor = '#7c3aed';
-                            markerEnd = 'url(#scc-intra-arrow)';
+                            markerEnd = showDirectedArrows ? 'url(#scc-intra-arrow)' : undefined;
                             strokeWidth = 3;
                         } else {
                             strokeColor = '#9ca3af';
-                            markerEnd = 'url(#scc-inter-arrow)';
+                            markerEnd = showDirectedArrows ? 'url(#scc-inter-arrow)' : undefined;
                             strokeDasharray = '5,4';
                             strokeWidth = 2;
                         }
                     } else if (edge.classification === 'solution') {
                         strokeColor = '#22c55e';
-                        markerEnd = "url(#solution-arrow)";
+                        markerEnd = showDirectedArrows ? 'url(#solution-arrow)' : undefined;
+                        strokeWidth = 3;
+                    } else if (edge.classification === 'back') {
+                        strokeColor = '#ef4444';
+                        markerEnd = showDirectedArrows ? 'url(#back-arrow)' : undefined;
+                        strokeDasharray = '5,5';
+                    } else if (edge.classification === 'forward') {
+                        strokeColor = '#16a34a';
+                        markerEnd = showDirectedArrows ? 'url(#forward-arrow)' : undefined;
+                        strokeDasharray = '4,2';
+                    } else if (edge.classification === 'cross') {
+                        strokeColor = '#111827';
+                        markerEnd = showDirectedArrows ? 'url(#cross-arrow)' : undefined;
+                        strokeDasharray = '2,2';
+                    } else if (edge.classification === 'cycle') {
+                        strokeColor = '#b91c1c';
+                        markerEnd = showDirectedArrows ? 'url(#back-arrow)' : undefined;
+                        strokeDasharray = '6,4';
                     }
 
                     return (
@@ -149,7 +244,7 @@ const ResultTree = () => {
                         />
                     );
                 })}
-                {/* Back Edges - Only show if not SCC (or maybe show them differently?) */}
+                {/* DFS-specific back edges are stored separately and shown as curved arcs. */}
                 {selectedAlgorithm !== 'scc' && backEdges.map((edge, i) => {
                     const sourcePos = manualPositions[edge.source] || positions[edge.source];
                     const targetPos = manualPositions[edge.target] || positions[edge.target];
@@ -173,7 +268,7 @@ const ResultTree = () => {
                             strokeWidth="2"
                             strokeDasharray="5,5"
                             fill="none"
-                            markerEnd="url(#back-arrow)"
+                            markerEnd={showDirectedArrows ? 'url(#back-arrow)' : undefined}
                         />
                     );
                 })}

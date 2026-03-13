@@ -33,9 +33,13 @@ const Edge = ({ edge, sourceNode, targetNode, isDirected }) => {
         strokeDasharray = '4,2';
         markerId = "url(#arrowhead-forward)";
     } else if (edge.classification === 'cross') {
-        strokeColor = '#d97706'; // amber-600
+        strokeColor = '#111827'; // gray-900
         strokeDasharray = '2,2';
         markerId = "url(#arrowhead-cross)";
+    } else if (edge.classification === 'cycle') {
+        strokeColor = '#b91c1c'; // red-700
+        strokeDasharray = '6,4';
+        markerId = "url(#arrowhead-back)";
     }
 
     const midX = (sourceNode.x + targetNode.x) / 2;

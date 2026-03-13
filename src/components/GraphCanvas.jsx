@@ -56,7 +56,7 @@ const GraphCanvas = () => {
                         <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a" />
                     </marker>
                     <marker id="arrowhead-cross" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
-                        <polygon points="0 0, 10 3.5, 0 7" fill="#d97706" />
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#111827" />
                     </marker>
                 </defs>
                 {edges.map(edge => (

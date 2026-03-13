@@ -38,6 +38,7 @@ const Sidebar = () => {
             console.warn("No sample for", selectedAlgorithm);
             const defaultSample = SAMPLES['dfs'];
             if (defaultSample) {
+                resetAlgorithm();
                 loadGraphData(defaultSample.nodes, defaultSample.edges, defaultSample.isDirected);
                 if (defaultSample.nodes.length > 0) {
                     setStartNodeId(defaultSample.nodes[0].id);
@@ -129,17 +130,19 @@ const Sidebar = () => {
                         <option value="floydWarshall">Floyd-Warshall (APSP)</option>
                     </select>
                     
-                    <div className="mt-2 text-sm text-gray-600">
-                        Source Node (Optional):
-                        <select
-                            value={startNodeId || ''}
-                            onChange={e => setStartNodeId(e.target.value || null)}
-                            className="mt-1 w-full p-2 border rounded-md bg-gray-50 outline-none focus:border-blue-500"
-                        >
-                            <option value="">Auto (First Node)</option>
-                            {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
-                        </select>
-                    </div>
+                    {selectedAlgorithm !== 'kruskal' && selectedAlgorithm !== 'scc' && (
+                        <div className="mt-2 text-sm text-gray-600">
+                            Source Node (Optional):
+                            <select
+                                value={startNodeId || ''}
+                                onChange={e => setStartNodeId(e.target.value || null)}
+                                className="mt-1 w-full p-2 border rounded-md bg-gray-50 outline-none focus:border-blue-500"
+                            >
+                                <option value="">Auto (First Node)</option>
+                                {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
+                            </select>
+                        </div>
+                    )}
                     
                     {selectedAlgorithm === 'dijkstra' && (
                         <div className="mt-2 text-sm text-gray-600">
