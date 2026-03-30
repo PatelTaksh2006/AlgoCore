@@ -1,7 +1,7 @@
 import React from 'react';
 import { useGraph } from '../context/GraphContext';
 import { useAlgorithm } from '../context/AlgorithmContext';
-import { Play, Pause, RotateCcw, Settings, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Pause, Settings, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 import { SAMPLES } from '../services/sampleData';
@@ -15,12 +15,30 @@ const Sidebar = () => {
 
     const {
         selectedAlgorithm, setSelectedAlgorithm,
-        runAlgorithm, isPlaying, setIsPlaying,
+        runAlgorithm, resumeAlgorithm, isPlaying, setIsPlaying,
         speed, setSpeed, resetAlgorithm,
         startNodeId, setStartNodeId,
         targetNodeId, setTargetNodeId,
-        nextStep, prevStep, currentStep, currentLine
+        nextStep, prevStep, currentStep, currentLine,
+        isCompleted, hasStartedRun
     } = useAlgorithm();
+
+    const handleRunClick = () => {
+        const hasProgress = currentStep > 0;
+
+        if ((hasStartedRun || hasProgress) && !isCompleted) {
+            resumeAlgorithm();
+            return;
+        }
+
+        runAlgorithm();
+        setIsPlaying(true);
+    };
+
+    const handleRestartClick = () => {
+        runAlgorithm();
+        setIsPlaying(true);
+    };
 
     const handleLoadSample = () => {
         const sample = SAMPLES[selectedAlgorithm];
@@ -223,10 +241,10 @@ const Sidebar = () => {
 
                     {!isPlaying ? (
                         <button
-                            onClick={() => { runAlgorithm(); setIsPlaying(true); }}
+                            onClick={handleRunClick}
                             className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md flex items-center justify-center gap-2 font-medium transition-colors"
                         >
-                            <Play className="w-4 h-4" /> Run
+                            <Play className="w-4 h-4" /> {(hasStartedRun || currentStep > 0) && !isCompleted ? 'Resume' : 'Run'}
                         </button>
                     ) : (
                         <button
@@ -247,15 +265,15 @@ const Sidebar = () => {
                     >
                         <ChevronRight className="w-4 h-4" />
                     </button>
-
-                    <button
-                        onClick={resetAlgorithm}
-                        className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors"
-                        title="Reset"
-                    >
-                        <RotateCcw className="w-4 h-4" />
-                    </button>
                 </div>
+
+                <button
+                    onClick={resetAlgorithm}
+                    className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-medium transition-colors"
+                    title="Clear current progress"
+                >
+                    Reset Progress
+                </button>
             </div>
         </div>
     );

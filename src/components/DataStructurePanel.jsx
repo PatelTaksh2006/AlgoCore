@@ -3,6 +3,7 @@ import useGraphStore from '../store/useGraphStore';
 import { motion, AnimatePresence, LayoutGroup, Reorder, useDragControls, useMotionValue } from 'framer-motion';
 import { useAlgorithm } from '../context/AlgorithmContext';
 import { useGraph } from '../context/GraphContext';
+import { saveDataStructurePanelState, loadDataStructurePanelState } from '../utils/persistenceUtils';
 
 const PANEL_MARGIN = 16;
 const MIN_PANEL_WIDTH = 420;
@@ -210,6 +211,7 @@ const DataStructurePanel = ({ constraintsRef }) => {
     const hasPositionedRef = useRef(false);
     const hasManualResizeRef = useRef(false);
     const dragControls = useDragControls();
+    const persistedPanelStateRef = useRef(loadDataStructurePanelState());
 
     // Determine type for label
     const getTypeLabel = () => {
@@ -224,7 +226,9 @@ const DataStructurePanel = ({ constraintsRef }) => {
     // Check if this is a routing algorithm
     const isRoutingAlgorithm = ['distanceVector', 'linkState'].includes(selectedAlgorithm);
     const isFloydWarshall = selectedAlgorithm === 'floydWarshall';
-    const [sectionOrder, setSectionOrder] = useState(DEFAULT_SECTION_ORDER);
+    const [sectionOrder, setSectionOrder] = useState(
+        persistedPanelStateRef.current?.sectionOrder || DEFAULT_SECTION_ORDER
+    );
 
     const visibleSectionIds = useMemo(() => {
         const ids = ['primaryDS', 'parent', 'visited'];
@@ -258,9 +262,35 @@ const DataStructurePanel = ({ constraintsRef }) => {
 
     // Determine panel width based on algorithm
     const defaultPanelWidth = isFloydWarshall ? 700 : 600;
-    const [panelSize, setPanelSize] = useState({ width: defaultPanelWidth, height: DEFAULT_PANEL_HEIGHT });
-    const x = useMotionValue(PANEL_MARGIN);
-    const y = useMotionValue(PANEL_MARGIN);
+    const [panelSize, setPanelSize] = useState(() => {
+        const savedSize = persistedPanelStateRef.current?.panelSize;
+        if (savedSize?.width && savedSize?.height) {
+            hasManualResizeRef.current = true;
+            return savedSize;
+        }
+        return { width: defaultPanelWidth, height: DEFAULT_PANEL_HEIGHT };
+    });
+    const x = useMotionValue(persistedPanelStateRef.current?.position?.x ?? PANEL_MARGIN);
+    const y = useMotionValue(persistedPanelStateRef.current?.position?.y ?? PANEL_MARGIN);
+
+    if (persistedPanelStateRef.current?.position && !hasPositionedRef.current) {
+        hasPositionedRef.current = true;
+    }
+
+    const persistPanelState = useCallback(() => {
+        saveDataStructurePanelState({
+            sectionOrder,
+            panelSize,
+            position: {
+                x: x.get(),
+                y: y.get(),
+            },
+        });
+    }, [panelSize, sectionOrder, x, y]);
+
+    useEffect(() => {
+        persistPanelState();
+    }, [panelSize, sectionOrder, persistPanelState]);
 
     const clampPosition = useCallback((nextX, nextY, size = panelSize) => {
         const container = constraintsRef?.current;
@@ -360,8 +390,9 @@ const DataStructurePanel = ({ constraintsRef }) => {
         resizeStateRef.current = null;
         window.removeEventListener('pointermove', handleResizeMove);
         window.removeEventListener('pointerup', stopResizing);
+        persistPanelState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [persistPanelState]);
 
     const handleResizeMove = useCallback((event) => {
         const resizeState = resizeStateRef.current;
@@ -414,7 +445,10 @@ const DataStructurePanel = ({ constraintsRef }) => {
             dragMomentum={false}
             dragElastic={0.04}
             whileDrag={{ scale: 1.01, boxShadow: '0 24px 48px rgba(15, 23, 42, 0.18)' }}
-            onDragEnd={() => syncPanelWithinViewport()}
+            onDragEnd={() => {
+                syncPanelWithinViewport();
+                persistPanelState();
+            }}
             style={{
                 x,
                 y,

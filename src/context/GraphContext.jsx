@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { saveGraphState, loadGraphState } from '../utils/persistenceUtils';
 
 const GraphContext = createContext();
 
@@ -6,10 +7,17 @@ const GraphContext = createContext();
 export const useGraph = () => useContext(GraphContext);
 
 export const GraphProvider = ({ children }) => {
-    const [nodes, setNodes] = useState([]);
-    const [edges, setEdges] = useState([]);
-    const [isDirected, setIsDirected] = useState(false);
+    // Initialize from localStorage if available
+    const initialState = loadGraphState();
+    const [nodes, setNodes] = useState(initialState?.nodes ?? []);
+    const [edges, setEdges] = useState(initialState?.edges ?? []);
+    const [isDirected, setIsDirected] = useState(initialState?.isDirected ?? false);
     const [selectedNodeForEdge, setSelectedNodeForEdge] = useState(null); // For two-click edge creation
+
+    // Save graph state to localStorage whenever it changes
+    useEffect(() => {
+        saveGraphState(nodes, edges, isDirected);
+    }, [nodes, edges, isDirected]);
 
     const addNode = useCallback((x, y) => {
         setNodes((prev) => {

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useGraph } from './GraphContext';
 import * as algorithms from '../algorithms';
 import useGraphStore from '../store/useGraphStore';
+import { saveAlgorithmState, loadAlgorithmState } from '../utils/persistenceUtils';
 
 const AlgorithmContext = createContext();
 
@@ -10,24 +11,79 @@ export const useAlgorithm = () => useContext(AlgorithmContext);
 
 export const AlgorithmProvider = ({ children }) => {
     const { nodes, edges, isDirected, clearClassification, setEdgeClassification, setNodeColor } = useGraph();
-    const [selectedAlgorithm, setSelectedAlgorithm] = useState('dfs');
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [speed, setSpeed] = useState(1000); // ms
-    const [currentStep, setCurrentStep] = useState(0);
-    const [startNodeId, setStartNodeId] = useState(null); // Added startNodeId state
-    const [targetNodeId, setTargetNodeId] = useState(null); // Added targetNodeId state
-    const [history, setHistory] = useState([]);
-    const [logs, setLogs] = useState([]);
-    const [currentLine, setCurrentLine] = useState(-1);
-    const [visited, setVisited] = useState([]); // Array of node IDs
-    const [parent, setParent] = useState({}); // Map childId -> parentId
-    const [components, setComponents] = useState([]); // Added components state
+    
+    // Initialize from localStorage if available
+    const initialState = loadAlgorithmState();
+    const [selectedAlgorithm, setSelectedAlgorithm] = useState(initialState?.selectedAlgorithm ?? 'dfs');
+    const [isPlaying, setIsPlaying] = useState(initialState?.isPlaying ?? false);
+    const [speed, setSpeed] = useState(initialState?.speed ?? 1000); // ms
+    const [currentStep, setCurrentStep] = useState(initialState?.currentStep ?? 0);
+    const [startNodeId, setStartNodeId] = useState(initialState?.startNodeId ?? null);
+    const [targetNodeId, setTargetNodeId] = useState(initialState?.targetNodeId ?? null);
+    const [history, setHistory] = useState(initialState?.history ?? []);
+    const [logs, setLogs] = useState(initialState?.logs ?? []);
+    const [currentLine, setCurrentLine] = useState(initialState?.currentLine ?? -1);
+    const [visited, setVisited] = useState(initialState?.visited ?? []);
+    const [parent, setParent] = useState(initialState?.parent ?? {});
+    const [components, setComponents] = useState(initialState?.components ?? []);
+    const [isCompleted, setIsCompleted] = useState(initialState?.isCompleted ?? false);
+    const [hasStartedRun, setHasStartedRun] = useState(
+        initialState?.hasStartedRun ?? ((initialState?.currentStep ?? 0) > 0 && !(initialState?.isCompleted ?? false))
+    );
 
     const generatorRef = useRef(null);
     const timerRef = useRef(null);
 
     // Store actions
     const { updateDS, addBackEdge, resetDS } = useGraphStore();
+
+    // Save algorithm state to localStorage whenever it changes
+    useEffect(() => {
+        saveAlgorithmState({
+            selectedAlgorithm,
+            startNodeId,
+            targetNodeId,
+            currentStep,
+            history,
+            logs,
+            visited,
+            parent,
+            components,
+            speed,
+            isPlaying,
+            currentLine,
+            isCompleted,
+            hasStartedRun,
+        });
+    }, [selectedAlgorithm, startNodeId, targetNodeId, currentStep, history, logs, visited, parent, components, speed, isPlaying, currentLine, isCompleted, hasStartedRun]);
+
+    const createGenerator = useCallback(() => {
+        if (nodes.length === 0) {
+            return null;
+        }
+
+        const evaluatedStartNode = selectedAlgorithm === 'kruskal' || selectedAlgorithm === 'scc'
+            ? null
+            : (startNodeId || nodes[0]?.id);
+        let evaluatedTargetNode = targetNodeId;
+
+        if (selectedAlgorithm === 'dijkstra' && !evaluatedTargetNode) {
+            evaluatedTargetNode = nodes.find(n => n.id !== evaluatedStartNode)?.id || null;
+        }
+
+        const algoFunc = algorithms[selectedAlgorithm];
+        if (!algoFunc) {
+            console.error('Algorithm: Function not found for', selectedAlgorithm);
+            return null;
+        }
+
+        const normalizedEdges = edges.map(edge => ({
+            ...edge,
+            directed: isDirected,
+        }));
+
+        return algoFunc(nodes, normalizedEdges, evaluatedStartNode, evaluatedTargetNode);
+    }, [nodes, edges, isDirected, selectedAlgorithm, startNodeId, targetNodeId]);
 
     const resetVisuals = useCallback(() => {
         clearClassification();
@@ -44,6 +100,8 @@ export const AlgorithmProvider = ({ children }) => {
         setCurrentStep(0);
         setHistory([]);
         setLogs([]);
+        setIsCompleted(false);
+        setHasStartedRun(false);
         resetVisuals();
         generatorRef.current = null;
         if (timerRef.current) clearInterval(timerRef.current);
@@ -56,35 +114,67 @@ export const AlgorithmProvider = ({ children }) => {
             return;
         }
 
-        const evaluatedStartNode = selectedAlgorithm === 'kruskal' || selectedAlgorithm === 'scc'
-            ? null
-            : (startNodeId || nodes[0]?.id);
-        let evaluatedTargetNode = targetNodeId;
-
-        // Dijkstra needs a concrete destination to show one final shortest path in green.
-        if (selectedAlgorithm === 'dijkstra' && !evaluatedTargetNode) {
-            evaluatedTargetNode = nodes.find(n => n.id !== evaluatedStartNode)?.id || null;
-        }
-
         console.log("Algorithm: Starting", {
             selectedAlgorithm,
-            startNodeId: evaluatedStartNode,
-            targetNodeId: evaluatedTargetNode,
+            startNodeId,
+            targetNodeId,
             nodesCount: nodes.length
         });
 
-        const algoFunc = algorithms[selectedAlgorithm];
-        if (algoFunc) {
-            const normalizedEdges = edges.map(edge => ({
-                ...edge,
-                directed: isDirected,
-            }));
-            generatorRef.current = algoFunc(nodes, normalizedEdges, evaluatedStartNode, evaluatedTargetNode);
+        const nextGenerator = createGenerator();
+        if (nextGenerator) {
+            generatorRef.current = nextGenerator;
+            setIsCompleted(false);
+            setHasStartedRun(true);
             console.log("Algorithm: Generator created");
         } else {
             console.error("Algorithm: Function not found for", selectedAlgorithm);
         }
-    }, [nodes, edges, isDirected, selectedAlgorithm, startNodeId, targetNodeId, resetAlgorithm]);
+    }, [nodes.length, selectedAlgorithm, startNodeId, targetNodeId, resetAlgorithm, createGenerator]);
+
+    const resumeAlgorithm = useCallback(() => {
+        if (isCompleted) {
+            return;
+        }
+
+        if (!generatorRef.current) {
+            const resumedGenerator = createGenerator();
+            if (!resumedGenerator) {
+                return;
+            }
+
+            let completedEarly = false;
+
+            for (let stepIdx = 0; stepIdx < currentStep; stepIdx += 1) {
+                while (true) {
+                    const { value, done: isDone } = resumedGenerator.next();
+                    if (isDone) {
+                        completedEarly = true;
+                        break;
+                    }
+                    if (value?.type === 'SET_LINE') {
+                        break;
+                    }
+                }
+
+                if (completedEarly) {
+                    break;
+                }
+            }
+
+            generatorRef.current = resumedGenerator;
+
+            if (completedEarly) {
+                setIsCompleted(true);
+                setHasStartedRun(false);
+                setIsPlaying(false);
+                return;
+            }
+        }
+
+        setHasStartedRun(true);
+        setIsPlaying(true);
+    }, [isCompleted, createGenerator, currentStep]);
 
     const applyStep = useCallback((stepData) => {
         if (!stepData) return;
@@ -174,17 +264,21 @@ export const AlgorithmProvider = ({ children }) => {
         if (batch.length > 0) {
             setHistory(prev => [...prev, batch]);
             setCurrentStep(prev => prev + 1);
+            setIsCompleted(false);
         }
 
         if (done) {
             console.log("Algorithm: Finished");
             setIsPlaying(false);
+            setIsCompleted(true);
+            setHasStartedRun(false);
         }
     }, [applyStep]);
 
     const prevStep = useCallback(() => {
         if (currentStep <= 0) return;
         setIsPlaying(false);
+        setIsCompleted(false);
 
         const newStepCount = currentStep - 1;
         resetVisuals();
@@ -226,7 +320,8 @@ export const AlgorithmProvider = ({ children }) => {
             targetNodeId, setTargetNodeId,
             currentStep, history, logs,
             currentLine, visited, parent, components,
-            runAlgorithm, nextStep, prevStep, resetAlgorithm
+            isCompleted, hasStartedRun,
+            runAlgorithm, resumeAlgorithm, nextStep, prevStep, resetAlgorithm
         }}>
             {children}
         </AlgorithmContext.Provider>

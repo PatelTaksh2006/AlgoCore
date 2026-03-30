@@ -1,24 +1,33 @@
 import { create } from 'zustand';
+import { saveStoreState, loadStoreState } from '../utils/persistenceUtils';
 
-const useGraphStore = create((set) => ({
+const initialStoreState = loadStoreState() || {};
+
+const useGraphStore = create((set, get) => ({
     // Data Structure Tracking
-    activeDS: [],
+    activeDS: initialStoreState.activeDS ?? [],
     dsAction: null, // 'push', 'pop', 'update', or null
 
     // Resultant Tree Enhancements
-    backEdges: [], // Array of edges { source, target, ... }
+    backEdges: initialStoreState.backEdges ?? [], // Array of edges { source, target, ... }
 
     // Routing Table (for Distance Vector)
-    routingTable: {}, // { nodeId: { destId: { dist: number, nextHop: nodeId } } }
-    activeTableNodeId: null, // The ID of the node currently processing its routing table
+    routingTable: initialStoreState.routingTable ?? {}, // { nodeId: { destId: { dist: number, nextHop: nodeId } } }
+    activeTableNodeId: initialStoreState.activeTableNodeId ?? null, // The ID of the node currently processing its routing table
 
     // Added features state
-    internalState: null,
-    resultData: null,
-    resultLayout: {},
+    internalState: initialStoreState.internalState ?? null,
+    resultData: initialStoreState.resultData ?? null,
+    resultLayout: initialStoreState.resultLayout ?? {},
 
     // Link State Database (for LSR)
-    lsdb: [], // Array of LSAs
+    lsdb: initialStoreState.lsdb ?? [], // Array of LSAs
+
+    // Persist current store snapshot to localStorage
+    persistStore: () => {
+        const state = get();
+        saveStoreState(state);
+    },
 
     // Actions
     pushDS: (item) => set((state) => ({
@@ -92,5 +101,9 @@ const useGraphStore = create((set) => ({
         }
     })),
 }));
+
+useGraphStore.subscribe((state) => {
+    saveStoreState(state);
+});
 
 export default useGraphStore;
