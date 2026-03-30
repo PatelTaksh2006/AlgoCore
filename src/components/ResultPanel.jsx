@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const ResultPanel = () => {
     const { selectedAlgorithm } = useAlgorithm();
 
-    const isConnectivity = ['scc', 'articulationPoints'].includes(selectedAlgorithm);
+    const isConnectivity = false;
     const isAPSP = selectedAlgorithm === 'floydWarshall';
 
     return (

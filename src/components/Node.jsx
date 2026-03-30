@@ -12,6 +12,7 @@ const Node = ({ node, updatePos, isHighlighted }) => {
     const [showEditModal, setShowEditModal] = useState(false);
     const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
     const isDraggingRef = useRef(false);
+    const dragStateRef = useRef(null);
 
     // Determine if this node is part of the final shortest path overlay
     const isPathNode = resultData?.type === 'dijkstraPath' && resultData.pathNodes.includes(node.id);
@@ -54,6 +55,55 @@ const Node = ({ node, updatePos, isHighlighted }) => {
         isDraggingRef.current = true;
     };
 
+    const handlePointerDown = (event) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+
+        handleDragStart();
+        dragStateRef.current = {
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            startNodeX: node.x,
+            startNodeY: node.y,
+            hasMoved: false,
+        };
+
+        const handlePointerMove = (moveEvent) => {
+            const dragState = dragStateRef.current;
+            if (!dragState) return;
+
+            const dx = moveEvent.clientX - dragState.startClientX;
+            const dy = moveEvent.clientY - dragState.startClientY;
+
+            if (!dragState.hasMoved && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+                dragState.hasMoved = true;
+            }
+
+            updatePos(node.id, dragState.startNodeX + dx, dragState.startNodeY + dy);
+        };
+
+        const handlePointerUp = () => {
+            const dragState = dragStateRef.current;
+            dragStateRef.current = null;
+
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+
+            if (dragState?.hasMoved) {
+                // Keep one click ignored immediately after drag to avoid accidental edge creation.
+                setTimeout(() => {
+                    isDraggingRef.current = false;
+                }, 0);
+                return;
+            }
+
+            isDraggingRef.current = false;
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+    };
+
     const handleSave = (data) => {
         if (data.label !== undefined) {
             updateNodeLabel(node.id, data.label);
@@ -67,37 +117,27 @@ const Node = ({ node, updatePos, isHighlighted }) => {
     return (
         <>
             <motion.div
-                drag
-                dragMomentum={false}
-                onDragStart={handleDragStart}
-                onDragEnd={() => {
-                    // Reset dragging flag after a short delay to allow click to be ignored
-                    setTimeout(() => { isDraggingRef.current = false; }, 50);
-                }}
-                onDrag={(_, info) => {
-                    isDraggingRef.current = true;
-                    updatePos(node.id, node.x + info.delta.x, node.y + info.delta.y);
-                }}
+                onPointerDown={handlePointerDown}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
-                initial={{ x: node.x, y: node.y }}
+                initial={false}
                 animate={{
-                    x: node.x,
-                    y: node.y,
                     scale: (node.color || isPathNode || isSelectedForEdge) ? 1.1 : 1,
                     borderColor: isSelectedForEdge ? '#8b5cf6' : isPathNode ? '#22c55e' : (node.color || '#e5e7eb'),
                     backgroundColor: isSelectedForEdge ? '#ede9fe' : isPathNode ? '#dcfce7' : (node.color ? '#eff6ff' : '#ffffff'),
                     borderWidth: isSelectedForEdge ? 4 : isPathNode ? 4 : 2,
                     boxShadow: isSelectedForEdge ? '0 0 12px rgba(139, 92, 246, 0.5)' : undefined
                 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 28, mass: 0.35 }}
                 className={cn(
                     "absolute w-12 h-12 rounded-full border flex items-center justify-center shadow-md cursor-grab active:cursor-grabbing select-none z-10"
                 )}
                 style={{
-                    // Center the node on x,y
+                    left: node.x,
+                    top: node.y,
                     marginLeft: -24,
-                    marginTop: -24
+                    marginTop: -24,
+                    touchAction: 'none',
                 }}
             >
                 <span className="font-semibold text-gray-700">{node.label}</span>

@@ -50,17 +50,17 @@ export const PSEUDOCODE = {
         "      add edge to MST"       // 5
     ],
     scc: [
-        "function TarjanSCC(u):",
-        "  ids[u], low[u] = time++, stack.push(u)",
-        "  onStack[u] = true",
-        "  for each neighbor v:",
-        "    if not visited[v]:",
-        "      TarjanSCC(v)",
-        "      low[u] = min(low[u], low[v])",
-        "    else if onStack[v]:",
-        "      low[u] = min(low[u], ids[v])",
-        "  if ids[u] == low[u]:",
-        "    pop from stack until u (new SCC)"
+        "function KosarajuSCC(G):",
+        "  visited = {}, stack = []",
+        "  for each vertex u in G: if not visited[u], DFS1(u)",
+        "  transpose G to G^T (reverse all edges)",
+        "  clear visited",
+        "  while stack is not empty:",
+        "    u = stack.pop()",
+        "    if not visited[u]:",
+        "      component = []",
+        "      DFS2(G^T, u, component)",
+        "      output component as one SCC"
     ],
     articulationPoints: [
         "function ArticulationPoints(G):",               // 0

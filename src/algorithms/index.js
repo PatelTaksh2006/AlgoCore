@@ -635,116 +635,198 @@ export function* kruskal(nodes, edges, startNodeId) {
 }
 
 export function* scc(nodes, edges, startNodeId) {
-    const adj = buildAdjacencyMap(nodes, edges);
     const orderedNodes = orderNodesFromStart(nodes, startNodeId || nodes[0]?.id);
+    const firstPassAdj = buildAdjacencyMap(nodes, edges);
 
-    const ids = {};
-    const low = {};
-    const onStack = {};
-    const stack = [];
-    const visited = {}; // Standard visited tracking using context
-    const allComponents = [];
+    const transposedAdj = {};
+    nodes.forEach((node) => {
+        transposedAdj[node.id] = [];
+    });
 
-    let idCounter = 0;
+    edges.forEach((edge) => {
+        const undirected = edgeIsUndirected(edge);
+        const weight = Number(edge.weight ?? 1);
 
-    // Helper generator for DFS
-    function* dfs(at) {
-        stack.push(at);
-        onStack[at] = true;
-        ids[at] = low[at] = idCounter++;
-        visited[at] = true;
-
-        // Line 1: ids[u], low[u] = time++, stack.push(u)
-        yield { type: 'SET_LINE', lineIndex: 1 };
-        yield { type: 'UPDATE_VISITED', nodeId: at };
-        yield { type: 'SET_NODE_COLOR', nodeId: at, color: '#fbbf24' }; // Visiting (Yellow)
-        yield { type: 'DS_UPDATE', data: [...stack], action: 'replace' }; // Show stack
-
-        // Line 2: onStack[u] = true
-        yield { type: 'SET_LINE', lineIndex: 2 };
-
-        const neighbors = adj[at] || [];
-        // Line 3: for each neighbor v
-        yield { type: 'SET_LINE', lineIndex: 3 };
-
-        for (const edge of neighbors) {
-            const to = edge.to;
-
-            // Line 4: if not visited[v]
-            yield { type: 'SET_LINE', lineIndex: 4 };
-
-            if (ids[to] === undefined) {
-                yield { type: 'UPDATE_PARENT', childId: to, parentId: at };
-
-                // Line 5: TarjanSCC(v)
-                yield { type: 'SET_LINE', lineIndex: 5 };
-                yield* dfs(to);
-
-                // Line 6: low[u] = min(low[u], low[v])
-                yield { type: 'SET_LINE', lineIndex: 6 };
-                low[at] = Math.min(low[at], low[to]);
-
-            } else if (onStack[to]) {
-                // Line 7: else if onStack[v]
-                yield { type: 'SET_LINE', lineIndex: 7 };
-
-                // Line 8: low[u] = min(low[u], ids[v])
-                yield { type: 'SET_LINE', lineIndex: 8 };
-                low[at] = Math.min(low[at], ids[to]);
-            }
-            // Loop Line 3
-            yield { type: 'SET_LINE', lineIndex: 3 };
+        if (undirected) {
+            transposedAdj[edge.source]?.push({ to: edge.target, id: edge.id, weight, undirected: true });
+            transposedAdj[edge.target]?.push({ to: edge.source, id: edge.id, weight, undirected: true });
+            return;
         }
 
-        // Line 9: if ids[u] == low[u]
-        yield { type: 'SET_LINE', lineIndex: 9 };
+        // Reverse directed edges for the second pass traversal.
+        transposedAdj[edge.target]?.push({ to: edge.source, id: edge.id, weight, undirected: false });
+    });
 
-        if (ids[at] === low[at]) {
-            // Line 10: pop from stack until u
-            yield { type: 'SET_LINE', lineIndex: 10 };
+    const visitedFirstPass = {};
+    const visitedSecondPass = {};
+    const finishStack = [];
+    const components = [];
 
-            const component = [];
-            let node;
-            do {
-                node = stack.pop();
-                onStack[node] = false;
-                component.push(node);
-                yield { type: 'SET_NODE_COLOR', nodeId: node, color: '#3b82f6' }; // Finished (Blue)
-            } while (node !== at);
+    const componentPalette = ['#7c3aed', '#0ea5e9', '#16a34a', '#f97316', '#dc2626', '#0d9488', '#db2777', '#4f46e5'];
 
-            allComponents.push(component);
-            yield { type: 'DS_UPDATE', data: [...stack], action: 'replace' };
-            yield { type: 'FOUND_COMPONENT', component: component };
-            yield { type: 'LOG', message: `Found SCC: ${component.length} nodes` };
+    function* dfsFirst(nodeId, parentId = null) {
+        // Keep stepping granular during DFS1 so users can see finish stack filling progressively.
+        yield { type: 'SET_LINE', lineIndex: 2 };
+
+        visitedFirstPass[nodeId] = true;
+        yield { type: 'UPDATE_VISITED', nodeId };
+        if (parentId !== null) {
+            yield { type: 'UPDATE_PARENT', childId: nodeId, parentId };
+        }
+        yield { type: 'SET_NODE_COLOR', nodeId, color: '#fbbf24' };
+        yield { type: 'LOG', message: `DFS1 visit: ${nodes.find((n) => n.id === nodeId)?.label ?? nodeId}` };
+
+        const neighbors = firstPassAdj[nodeId] || [];
+        for (const edge of neighbors) {
+            yield { type: 'SET_LINE', lineIndex: 2 };
+            const nextNodeId = edge.to;
+            if (!visitedFirstPass[nextNodeId]) {
+                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'scc-pass1' };
+                yield* dfsFirst(nextNodeId, nodeId);
+            }
+        }
+
+        yield { type: 'SET_LINE', lineIndex: 2 };
+        finishStack.push(nodeId);
+        yield { type: 'SET_NODE_COLOR', nodeId, color: '#3b82f6' };
+        yield { type: 'DS_UPDATE', data: [...finishStack], action: 'push', node: nodeId };
+        yield { type: 'LOG', message: `Finish push: ${nodes.find((n) => n.id === nodeId)?.label ?? nodeId}` };
+    }
+
+    function* dfsSecond(nodeId, component, componentColor, parentId = null) {
+        visitedSecondPass[nodeId] = true;
+        component.push(nodeId);
+
+        yield { type: 'UPDATE_VISITED', nodeId };
+        if (parentId !== null) {
+            yield { type: 'UPDATE_PARENT', childId: nodeId, parentId };
+        }
+        yield { type: 'SET_NODE_COLOR', nodeId, color: componentColor };
+
+        const neighbors = transposedAdj[nodeId] || [];
+        for (const edge of neighbors) {
+            const nextNodeId = edge.to;
+            if (!visitedSecondPass[nextNodeId]) {
+                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'scc-pass2' };
+                yield* dfsSecond(nextNodeId, component, componentColor, nodeId);
+            }
         }
     }
 
-    // Line 0: function TarjanSCC(u)
     yield { type: 'SET_LINE', lineIndex: 0 };
-    yield { type: 'LOG', message: "Tarjan's SCC Started" };
+    yield { type: 'LOG', message: 'Kosaraju SCC Started' };
+    yield {
+        type: 'SET_RESULT_DATA',
+        data: {
+            type: 'sccKosaraju',
+            phase: 'first-pass',
+            isReversed: false,
+            sccs: [],
+            finishStack: [],
+            originalGraph: { nodes, edges },
+        },
+    };
 
-    // Run DFS on all nodes (to cover disconnected components)
-    // Note: Tarjan's typically iterates all nodes 1..V
+    yield { type: 'SET_LINE', lineIndex: 1 };
     for (const node of orderedNodes) {
-        if (ids[node.id] === undefined) {
-            // If we want to visualize the outer loop, maybe set a line?
-            // But pseudocode function is TarjanSCC(u).
-            // Let's just call it.
-            yield* dfs(node.id);
+        yield { type: 'SET_LINE', lineIndex: 2 };
+        if (!visitedFirstPass[node.id]) {
+            yield { type: 'LOG', message: `DFS1 from ${node.label}` };
+            yield* dfsFirst(node.id);
         }
+    }
+
+    yield { type: 'SET_LINE', lineIndex: 3 };
+    for (const edge of edges) {
+        yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'scc-reversed' };
+    }
+    for (const node of nodes) {
+        yield { type: 'SET_NODE_COLOR', nodeId: node.id, color: undefined };
+    }
+    yield { type: 'RESET_VISITED' };
+    yield { type: 'RESET_PARENT' };
+    yield { type: 'RESET_COMPONENTS' };
+    yield {
+        type: 'SET_RESULT_DATA',
+        data: {
+            type: 'sccKosaraju',
+            phase: 'second-pass',
+            isReversed: true,
+            sccs: [],
+            finishStack: [...finishStack],
+            originalGraph: { nodes, edges },
+        },
+    };
+    yield { type: 'LOG', message: 'Graph transposed. Running DFS2 on G^T using finish-time stack.' };
+
+    const processStack = [...finishStack];
+    yield { type: 'SET_LINE', lineIndex: 4 };
+    yield { type: 'DS_UPDATE', data: [...processStack], action: 'update' };
+
+    while (processStack.length > 0) {
+        yield { type: 'SET_LINE', lineIndex: 5 };
+        const nodeId = processStack.pop();
+        yield { type: 'SET_LINE', lineIndex: 6 };
+        yield { type: 'DS_UPDATE', data: [...processStack], action: 'pop', node: nodeId };
+
+        yield { type: 'SET_LINE', lineIndex: 7 };
+        if (visitedSecondPass[nodeId]) {
+            continue;
+        }
+
+        const component = [];
+        const componentColor = componentPalette[components.length % componentPalette.length];
+
+        yield { type: 'SET_LINE', lineIndex: 8 };
+        yield { type: 'SET_LINE', lineIndex: 9 };
+        yield* dfsSecond(nodeId, component, componentColor);
+
+        const componentSet = new Set(component);
+        for (const edge of edges) {
+            if (componentSet.has(edge.source) && componentSet.has(edge.target)) {
+                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'scc-component' };
+            }
+        }
+
+        // Remove all nodes of this SCC from remaining finish-order stack so they visually
+        // transfer out of the stack once the SCC is identified.
+        const remainingAfterExtract = processStack.filter((id) => !componentSet.has(id));
+        if (remainingAfterExtract.length !== processStack.length) {
+            processStack.length = 0;
+            processStack.push(...remainingAfterExtract);
+            yield { type: 'DS_UPDATE', data: [...processStack], action: 'update' };
+        }
+
+        components.push(component);
+        yield { type: 'SET_LINE', lineIndex: 10 };
+        yield { type: 'FOUND_COMPONENT', component };
+        yield {
+            type: 'SET_RESULT_DATA',
+            data: {
+                type: 'sccKosaraju',
+                phase: 'second-pass',
+                isReversed: true,
+                sccs: [...components],
+                finishStack: [...processStack],
+                originalGraph: { nodes, edges },
+            },
+        };
+        yield { type: 'LOG', message: `Found SCC: ${component.map((id) => nodes.find((n) => n.id === id)?.label ?? id).join(', ')}` };
     }
 
     yield {
         type: 'SET_RESULT_DATA',
         data: {
-            type: 'scc',
-            sccs: allComponents,
-            originalGraph: { nodes, edges }
-        }
+            type: 'sccKosaraju',
+            phase: 'completed',
+            isReversed: true,
+            sccs: [...components],
+            finishStack: [],
+            originalGraph: { nodes, edges },
+        },
     };
-
     yield { type: 'SET_LINE', lineIndex: -1 };
-    yield { type: 'LOG', message: "SCC Completed" };
+    yield { type: 'LOG', message: 'Kosaraju SCC Completed' };
 }
 
 export function* distanceVector(nodes, edges, startNodeId) {
@@ -753,7 +835,15 @@ export function* distanceVector(nodes, edges, startNodeId) {
     // Let N = nodes.length. We run N-1 iterations.
 
     const orderedNodes = orderNodesFromStart(nodes, startNodeId || nodes[0]?.id);
+    const sourceId = orderedNodes[0]?.id;
     const dist = {}; // { nodeId: { destId: { dist: number, nextHop: nodeId } } }
+    const nodeLabelMap = {};
+    nodes.forEach((n) => {
+        nodeLabelMap[n.id] = n.label;
+    });
+    let compareStep = 0;
+
+    const toDisplayDistance = (value) => (value === Infinity ? 'INF' : value);
 
     // Initialize
     orderedNodes.forEach(u => {
@@ -816,9 +906,27 @@ export function* distanceVector(nodes, edges, startNodeId) {
                 // If v has a path to dest
                 if (dist[v][destId].dist !== Infinity) {
                     const newDist = w + dist[v][destId].dist;
+                    const currentDist = dist[u][destId].dist;
+                    compareStep += 1;
 
                     // Line 3: relaxation check
-                    yield { type: 'SET_LINE', lineIndex: 3 };
+                    yield {
+                        type: 'SET_LINE',
+                        lineIndex: 3,
+                        internalState: {
+                            routingComparison: {
+                                id: compareStep,
+                                algorithm: 'distanceVector',
+                                edgeId: edge.id,
+                                via: `${nodeLabelMap[u] || u} <- ${nodeLabelMap[v] || v}`,
+                                destination: nodeLabelMap[destId] || destId,
+                                lhs: toDisplayDistance(currentDist),
+                                rhs: toDisplayDistance(newDist),
+                                operator: '>',
+                                result: currentDist > newDist,
+                            },
+                        },
+                    };
 
                     if (newDist < dist[u][destId].dist) {
                         // Line 4: update distance
@@ -845,9 +953,27 @@ export function* distanceVector(nodes, edges, startNodeId) {
                     const destId = dest.id;
                     if (dist[u][destId].dist !== Infinity) {
                         const newDist = w + dist[u][destId].dist;
+                        const currentDist = dist[v][destId].dist;
+                        compareStep += 1;
 
                         // Line 3: relaxation check
-                        yield { type: 'SET_LINE', lineIndex: 3 };
+                        yield {
+                            type: 'SET_LINE',
+                            lineIndex: 3,
+                            internalState: {
+                                routingComparison: {
+                                    id: compareStep,
+                                    algorithm: 'distanceVector',
+                                    edgeId: edge.id,
+                                    via: `${nodeLabelMap[v] || v} <- ${nodeLabelMap[u] || u}`,
+                                    destination: nodeLabelMap[destId] || destId,
+                                    lhs: toDisplayDistance(currentDist),
+                                    rhs: toDisplayDistance(newDist),
+                                    operator: '>',
+                                    result: currentDist > newDist,
+                                },
+                            },
+                        };
 
                         if (newDist < dist[v][destId].dist) {
                             // Line 4: update distance
@@ -891,6 +1017,70 @@ export function* distanceVector(nodes, edges, startNodeId) {
         yield { type: 'LOG', message: `Converged in ${iterations} iterations.` };
     }
 
+    const finalCosts = {};
+    const finalTreeEdgeIds = new Set();
+
+    if (sourceId && dist[sourceId]) {
+        for (const dest of orderedNodes) {
+            finalCosts[dest.id] = dist[sourceId][dest.id]?.dist ?? Infinity;
+        }
+
+        for (const dest of orderedNodes) {
+            if (dest.id === sourceId) {
+                continue;
+            }
+            if (finalCosts[dest.id] === Infinity) {
+                continue;
+            }
+
+            let current = sourceId;
+            const visitedOnPath = new Set([current]);
+
+            while (current !== dest.id) {
+                const nextHop = dist[current]?.[dest.id]?.nextHop ?? null;
+                if (!nextHop || visitedOnPath.has(nextHop)) {
+                    break;
+                }
+
+                const traversedEdge = findTraversableEdge(edges, current, nextHop, { forceUndirected: true });
+                if (traversedEdge) {
+                    finalTreeEdgeIds.add(traversedEdge.id);
+                    yield { type: 'CLASSIFY_EDGE', edgeId: traversedEdge.id, classification: 'solution' };
+                }
+
+                visitedOnPath.add(nextHop);
+                current = nextHop;
+            }
+        }
+
+        yield { type: 'SET_NODE_COLOR', nodeId: sourceId, color: '#8b5cf6' };
+        for (const node of orderedNodes) {
+            if (node.id === sourceId) {
+                continue;
+            }
+            if (finalCosts[node.id] !== Infinity) {
+                yield { type: 'SET_NODE_COLOR', nodeId: node.id, color: '#22c55e' };
+            }
+        }
+
+        yield {
+            type: 'SET_RESULT_DATA',
+            data: {
+                type: 'distanceVectorFinal',
+                sourceId,
+                finalCosts,
+                finalTreeEdgeIds: Array.from(finalTreeEdgeIds),
+            }
+        };
+
+        yield {
+            type: 'LOG',
+            message: `Final costs from ${nodes.find((n) => n.id === sourceId)?.label ?? sourceId}: ${orderedNodes
+                .map((node) => `${nodes.find((n) => n.id === node.id)?.label ?? node.id}=${finalCosts[node.id] === Infinity ? 'INF' : finalCosts[node.id]}`)
+                .join(', ')}`
+        };
+    }
+
     yield { type: 'SET_ACTIVE_TABLE_NODE', nodeId: null };
     yield { type: 'SET_LINE', lineIndex: -1 };
 }
@@ -898,6 +1088,12 @@ export function* distanceVector(nodes, edges, startNodeId) {
 export function* linkState(nodes, edges, startNodeId) {
     // Link State Routing: Flooding + Dijkstra (SPF)
     const orderedNodes = orderNodesFromStart(nodes, startNodeId || nodes[0]?.id);
+    const nodeLabelMap = {};
+    nodes.forEach((n) => {
+        nodeLabelMap[n.id] = n.label;
+    });
+    let compareStep = 0;
+    const toDisplayDistance = (value) => (value === Infinity ? 'INF' : value);
 
     const dist = {}; // Routing table state
 
@@ -1024,6 +1220,28 @@ export function* linkState(nodes, edges, startNodeId) {
             const neighbors = getNeighbors(u);
             for (const v of neighbors) {
                 const weight = getWeight(u, v);
+                const candidate = d[u] + weight;
+                const current = d[v];
+                compareStep += 1;
+
+                yield {
+                    type: 'SET_LINE',
+                    lineIndex: 3,
+                    internalState: {
+                        routingComparison: {
+                            id: compareStep,
+                            algorithm: 'linkState',
+                            edgeId: `${u}-${v}`,
+                            via: `${nodeLabelMap[source.id] || source.id} SPF`,
+                            destination: nodeLabelMap[v] || v,
+                            lhs: toDisplayDistance(current),
+                            rhs: toDisplayDistance(candidate),
+                            operator: '>',
+                            result: current > candidate,
+                        }
+                    }
+                };
+
                 if (d[u] + weight < d[v]) {
                     d[v] = d[u] + weight;
 
@@ -1070,6 +1288,17 @@ export function* floydWarshall(nodes, edges, startNodeId) {
     const orderedNodes = orderNodesFromStart(nodes, startNodeId || nodes[0]?.id);
     const dist = {};
     const next = {};
+    let compareStep = 0;
+
+    const toDisplayDistance = (value) => (value === Infinity ? 'INF' : value);
+    const buildFwState = (activeNodes, fwComparison = null, fwStatus = 'running') => ({
+        matrix: JSON.parse(JSON.stringify(dist)),
+        next: JSON.parse(JSON.stringify(next)),
+        startNodeId,
+        activeNodes,
+        fwComparison,
+        fwStatus,
+    });
 
     // Initialize matrices
     for (const u of orderedNodes) {
@@ -1097,24 +1326,63 @@ export function* floydWarshall(nodes, edges, startNodeId) {
         }
     }
 
-    yield { type: 'LOG', message: `Floyd-Warshall Initialization Complete`, internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), startNodeId, activeNodes: { k: null, i: null, j: null } } };
+    yield { type: 'LOG', message: `Floyd-Warshall Initialization Complete`, internalState: buildFwState({ k: null, i: null, j: null }, null, 'init') };
     yield { type: 'SET_LINE', lineIndex: 0 };
 
     for (const k of orderedNodes) {
         let updatedInK = false;
 
-        yield { type: 'SET_NODE_COLOR', nodeId: k.id, color: '#fbbf24', internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), startNodeId, activeNodes: { k: k.id, i: null, j: null } } };
+        yield { type: 'SET_NODE_COLOR', nodeId: k.id, color: '#fbbf24', internalState: buildFwState({ k: k.id, i: null, j: null }, null, 'running') };
 
         for (const i of orderedNodes) {
             for (const j of orderedNodes) {
-                if (dist[i.id][k.id] !== Infinity && dist[k.id][j.id] !== Infinity && dist[i.id][j.id] > dist[i.id][k.id] + dist[k.id][j.id]) {
+                const current = dist[i.id][j.id];
+                const candidate = (dist[i.id][k.id] !== Infinity && dist[k.id][j.id] !== Infinity)
+                    ? dist[i.id][k.id] + dist[k.id][j.id]
+                    : Infinity;
+                const shouldUpdate = current > candidate;
+
+                compareStep += 1;
+                yield {
+                    type: 'SET_LINE',
+                    lineIndex: 1,
+                    internalState: buildFwState(
+                        { k: k.id, i: i.id, j: j.id },
+                        {
+                            id: compareStep,
+                            algorithm: 'floydWarshall',
+                            i: i.label,
+                            j: j.label,
+                            k: k.label,
+                            lhs: toDisplayDistance(current),
+                            rhs: `${toDisplayDistance(dist[i.id][k.id])} + ${toDisplayDistance(dist[k.id][j.id])}`,
+                            rhsValue: toDisplayDistance(candidate),
+                            operator: '>',
+                            result: shouldUpdate,
+                        },
+                        'running'
+                    )
+                };
+
+                if (shouldUpdate) {
                     dist[i.id][j.id] = dist[i.id][k.id] + dist[k.id][j.id];
                     next[i.id][j.id] = next[i.id][k.id];
                     updatedInK = true;
                     yield {
                         type: 'LOG',
                         message: `Updated path: ${i.label} -> ${j.label} via ${k.label} (dist: ${dist[i.id][j.id]})`,
-                        internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), startNodeId, activeNodes: { k: k.id, i: i.id, j: j.id } }
+                        internalState: buildFwState({ k: k.id, i: i.id, j: j.id }, {
+                            id: compareStep,
+                            algorithm: 'floydWarshall',
+                            i: i.label,
+                            j: j.label,
+                            k: k.label,
+                            lhs: toDisplayDistance(current),
+                            rhs: `${toDisplayDistance(dist[i.id][k.id])} + ${toDisplayDistance(dist[k.id][j.id])}`,
+                            rhsValue: toDisplayDistance(candidate),
+                            operator: '>',
+                            result: true,
+                        }, 'running')
                     };
                 }
             }
@@ -1123,15 +1391,15 @@ export function* floydWarshall(nodes, edges, startNodeId) {
             yield {
                 type: 'LOG',
                 message: `Checked intermediate node ${k.label} (no shorter paths found)`,
-                internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), startNodeId, activeNodes: { k: k.id, i: null, j: null } }
+                internalState: buildFwState({ k: k.id, i: null, j: null }, null, 'running')
             };
         }
 
-        yield { type: 'SET_NODE_COLOR', nodeId: k.id, color: '#3b82f6', internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), startNodeId, activeNodes: { k: null, i: null, j: null } } };
+        yield { type: 'SET_NODE_COLOR', nodeId: k.id, color: '#3b82f6', internalState: buildFwState({ k: null, i: null, j: null }, null, 'running') };
         yield { type: 'SET_LINE', lineIndex: 1 };
     }
 
-    yield { type: 'LOG', message: `Floyd-Warshall Completed`, internalState: { matrix: JSON.parse(JSON.stringify(dist)), next: JSON.parse(JSON.stringify(next)), startNodeId, activeNodes: { k: null, i: null, j: null } } };
+    yield { type: 'LOG', message: `Floyd-Warshall Completed`, internalState: buildFwState({ k: null, i: null, j: null }, null, 'completed') };
     yield { type: 'SET_LINE', lineIndex: -1 };
 }
 
@@ -1174,6 +1442,7 @@ export function* articulationPoints(nodes, edges, startNodeId) {
         internalState.lowLink = { ...low };
         internalState.visited = [...visited];
 
+        yield { type: 'UPDATE_VISITED', nodeId: u };
         yield { type: 'SET_NODE_COLOR', nodeId: u, color: '#fbbf24', internalState: { ...internalState } };
         yield { type: 'LOG', message: `Visited ${nodes.find(n => n.id === u)?.label}`, internalState: { ...internalState } };
 
@@ -1188,6 +1457,7 @@ export function* articulationPoints(nodes, edges, startNodeId) {
             if (visited.has(v)) {
                 // Line 3: back-edge case
                 yield { type: 'SET_LINE', lineIndex: 3 };
+                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'back' };
 
                 low[u] = Math.min(low[u], discovery[v]);
                 internalState.lowLink = { ...low };
@@ -1198,6 +1468,8 @@ export function* articulationPoints(nodes, edges, startNodeId) {
             } else {
                 children++;
                 parent[v] = u;
+                yield { type: 'UPDATE_PARENT', childId: v, parentId: u };
+                yield { type: 'CLASSIFY_EDGE', edgeId: edge.id, classification: 'tree' };
 
                 // Line 5: DFS(v) then update low[u]
                 yield { type: 'SET_LINE', lineIndex: 5 };

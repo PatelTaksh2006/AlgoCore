@@ -119,6 +119,12 @@ export const AlgorithmProvider = ({ children }) => {
                 ...prev,
                 [stepData.childId]: stepData.parentId
             }));
+        } else if (stepData.type === 'RESET_VISITED') {
+            setVisited([]);
+        } else if (stepData.type === 'RESET_PARENT') {
+            setParent({});
+        } else if (stepData.type === 'RESET_COMPONENTS') {
+            setComponents([]);
         } else if (stepData.type === 'FOUND_COMPONENT') {
             setComponents(prev => [...prev, stepData.component]);
         } else if (stepData.type === 'DS_UPDATE_ROUTING_TABLE') {

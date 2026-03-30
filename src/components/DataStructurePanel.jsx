@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import useGraphStore from '../store/useGraphStore';
-import { motion, AnimatePresence, useDragControls, useMotionValue } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup, Reorder, useDragControls, useMotionValue } from 'framer-motion';
 import { useAlgorithm } from '../context/AlgorithmContext';
 import { useGraph } from '../context/GraphContext';
 
@@ -8,6 +8,7 @@ const PANEL_MARGIN = 16;
 const MIN_PANEL_WIDTH = 420;
 const MIN_PANEL_HEIGHT = 220;
 const DEFAULT_PANEL_HEIGHT = 360;
+const DEFAULT_SECTION_ORDER = ['primaryDS', 'parent', 'visited', 'scc', 'ap', 'floyd', 'routing'];
 
 // Helper sub-component for AP algorithm state
 const APStateTable = ({ internalState, nodeLabelMap }) => {
@@ -140,8 +141,9 @@ const FloydWarshallState = ({ internalState, nodeLabelMap, nodes }) => {
 };
 
 // Distance Vector / Link State State
-const RoutingAlgorithmState = ({ lsdb, routingTable, activeTableNodeId, nodeLabelMap, selectedAlgorithm }) => {
+const RoutingAlgorithmState = ({ lsdb, routingTable, activeTableNodeId, nodeLabelMap, selectedAlgorithm, internalState }) => {
     const isLinkState = selectedAlgorithm === 'linkState';
+    const comparison = internalState?.routingComparison;
     
     return (
         <div className="relative w-full border-t border-blue-100 pt-2 mt-2">
@@ -153,28 +155,43 @@ const RoutingAlgorithmState = ({ lsdb, routingTable, activeTableNodeId, nodeLabe
                     </span>
                 )}
             </div>
-            
-            {/* LSDB for Link State */}
-            {isLinkState && lsdb && lsdb.length > 0 && (
-                <div className="mb-2">
-                    <div className="text-[10px] font-semibold text-gray-500 mb-1">LSDB Entries: {lsdb.length}</div>
-                    <div className="flex flex-wrap gap-1">
-                        {lsdb.map((lsa, idx) => (
-                            <motion.div
-                                key={idx}
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="text-[9px] px-1.5 py-0.5 bg-blue-100 border border-blue-300 rounded"
-                            >
-                                <span className="font-bold">{nodeLabelMap[lsa.sourceId]}</span>
-                                {' → '}
-                                {lsa.links.map(l => nodeLabelMap[l.to]).join(', ')}
-                            </motion.div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
+            <div className="mb-2 rounded-lg border border-sky-200 bg-sky-50/80 p-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 mb-1">
+                        Comparison Animation
+                    </div>
+
+                    {!comparison && (
+                        <div className="text-[10px] text-gray-500">
+                            Waiting for first relaxation comparison...
+                        </div>
+                    )}
+
+                    {comparison && (
+                        <motion.div
+                            key={comparison.id}
+                            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            className="rounded-md border border-sky-200 bg-white px-2 py-1"
+                        >
+                            <div className="text-[10px] text-sky-700 font-semibold">
+                                {comparison.algorithm === 'linkState' ? 'Link State SPF' : 'Distance Vector'}
+                            </div>
+                            <div className="text-[10px] text-sky-700 font-semibold">
+                                Via {comparison.via}, Dest {comparison.destination}
+                            </div>
+                            <div className="mt-1 flex items-center gap-1 text-[11px] font-mono text-gray-700">
+                                <span>{comparison.lhs}</span>
+                                <span>{comparison.operator}</span>
+                                <span>{comparison.rhs}</span>
+                                <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold ${comparison.result ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                                    {comparison.result ? 'UPDATE' : 'NO UPDATE'}
+                                </span>
+                            </div>
+                        </motion.div>
+                    )}
+            </div>
+            
             {/* Routing Table Summary */}
             {routingTable && Object.keys(routingTable).length > 0 && (
                 <div className="text-[10px] text-gray-500">
@@ -197,6 +214,7 @@ const DataStructurePanel = ({ constraintsRef }) => {
     // Determine type for label
     const getTypeLabel = () => {
         if (selectedAlgorithm === 'dfs') return 'Stack';
+        if (selectedAlgorithm === 'scc') return 'Finish Stack';
         if (selectedAlgorithm === 'bfs') return 'Queue';
         if (selectedAlgorithm === 'dijkstra' || selectedAlgorithm === 'prim') return 'Priority Queue';
         if (selectedAlgorithm === 'linkState') return 'Priority Queue (SPF)';
@@ -206,6 +224,30 @@ const DataStructurePanel = ({ constraintsRef }) => {
     // Check if this is a routing algorithm
     const isRoutingAlgorithm = ['distanceVector', 'linkState'].includes(selectedAlgorithm);
     const isFloydWarshall = selectedAlgorithm === 'floydWarshall';
+    const [sectionOrder, setSectionOrder] = useState(DEFAULT_SECTION_ORDER);
+
+    const visibleSectionIds = useMemo(() => {
+        const ids = ['primaryDS', 'parent', 'visited'];
+        if (selectedAlgorithm === 'scc') ids.push('scc');
+        if (selectedAlgorithm === 'articulationPoints') ids.push('ap');
+        if (isFloydWarshall) ids.push('floyd');
+        if (isRoutingAlgorithm) ids.push('routing');
+        return ids;
+    }, [selectedAlgorithm, isFloydWarshall, isRoutingAlgorithm]);
+
+    const orderedVisibleSectionIds = useMemo(() => {
+        const visibleSet = new Set(visibleSectionIds);
+        const inOrder = sectionOrder.filter(id => visibleSet.has(id));
+        const missing = visibleSectionIds.filter(id => !inOrder.includes(id));
+        return [...inOrder, ...missing];
+    }, [sectionOrder, visibleSectionIds]);
+
+    const handleSectionReorder = useCallback((nextVisibleOrder) => {
+        setSectionOrder((prev) => {
+            const hidden = prev.filter(id => !visibleSectionIds.includes(id));
+            return [...nextVisibleOrder, ...hidden];
+        });
+    }, [visibleSectionIds]);
 
     // Memoize node lookup
     const nodeLabelMap = useMemo(() => {
@@ -395,23 +437,40 @@ const DataStructurePanel = ({ constraintsRef }) => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+            <LayoutGroup>
+            <Reorder.Group
+                axis="y"
+                values={orderedVisibleSectionIds}
+                onReorder={handleSectionReorder}
+                className="flex-1 overflow-y-auto pr-2 pb-8 space-y-3"
+            >
 
-            {/* Primary Data Structure (Stack/Queue) */}
-            <div className="relative h-16 w-full">
-                <div className="absolute -top-1 left-0 text-xs font-bold text-gray-400 uppercase tracking-wider">
+            {orderedVisibleSectionIds.map((sectionId) => (
+                <Reorder.Item
+                    key={sectionId}
+                    value={sectionId}
+                    whileDrag={{ scale: 1.01, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.14)' }}
+                    className="relative rounded-lg border border-gray-100 bg-white/80 p-2"
+                >
+            {sectionId === 'primaryDS' && (
+            <div className="w-full">
+                <div className="mb-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                     {getTypeLabel()} {activeDS.length > 0 && `(${activeDS.length})`}
                 </div>
-                <div className="flex items-center gap-2 w-full mt-4 overflow-x-auto px-2 scrollbar-hide h-full">
+                <div className="flex items-center gap-2 w-full overflow-x-auto px-1 scrollbar-hide min-h-[44px]">
                     <AnimatePresence mode='popLayout'>
                         {activeDS.map((item, index) => {
                             const id = typeof item === 'object' ? item.id : item;
                             const priority = typeof item === 'object' ? (item.d ?? item.k ?? '') : '';
                             const label = nodeLabelMap[id] || id.toString().replace('node-', '');
+                            const isSccToken = selectedAlgorithm === 'scc';
+                            const tokenKey = isSccToken ? String(id) : `${id}-${index}`;
+                            const tokenLayoutId = isSccToken ? `scc-token-${id}` : undefined;
 
                             return (
                                 <motion.div
-                                    key={`${id}-${index}`}
+                                    key={tokenKey}
+                                    layoutId={tokenLayoutId}
                                     initial={{ opacity: 0, scale: 0.8 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.5 }}
@@ -431,13 +490,14 @@ const DataStructurePanel = ({ constraintsRef }) => {
                     {activeDS.length === 0 && <div className="text-gray-400 text-sm italic w-full text-center">Empty</div>}
                 </div>
             </div>
+            )}
 
-            {/* Parent Array */}
-            <div className="relative h-16 w-full border-t border-gray-100 pt-2">
-                <div className="absolute top-1 left-0 text-xs font-bold text-gray-400 uppercase tracking-wider">
+            {sectionId === 'parent' && (
+            <div className="w-full">
+                <div className="mb-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                     Parent Array
                 </div>
-                <div className="flex items-center gap-2 w-full mt-5 overflow-x-auto px-2 scrollbar-hide">
+                <div className="flex items-center gap-2 w-full overflow-x-auto px-1 scrollbar-hide min-h-[44px]">
                     <AnimatePresence>
                         {Object.entries(parent).map(([childId, parentId]) => {
                             const childLabel = nodeLabelMap[childId] || childId;
@@ -457,13 +517,14 @@ const DataStructurePanel = ({ constraintsRef }) => {
                     {Object.keys(parent).length === 0 && <div className="text-gray-400 text-sm italic w-full text-center mt-2">No parents recorded</div>}
                 </div>
             </div>
+            )}
 
-            {/* Visited Array */}
-            <div className="relative h-12 w-full border-t border-gray-100 pt-2">
-                <div className="absolute top-1 left-0 text-xs font-bold text-gray-400 uppercase tracking-wider">
+            {sectionId === 'visited' && (
+            <div className="w-full">
+                <div className="mb-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                     Visited Order
                 </div>
-                <div className="flex items-center gap-1 w-full mt-4 overflow-x-auto px-2 scrollbar-hide">
+                <div className="flex items-center gap-1 w-full overflow-x-auto px-1 scrollbar-hide min-h-[36px]">
                     {visited.map((nodeId, i) => {
                         const label = nodeLabelMap[nodeId] || nodeId;
                         return (
@@ -480,14 +541,14 @@ const DataStructurePanel = ({ constraintsRef }) => {
                     {visited.length === 0 && <div className="text-gray-400 text-sm italic w-full text-center">No nodes visited</div>}
                 </div>
             </div>
+            )}
 
-            {/* Components Array (for SCC) */}
-            {selectedAlgorithm === 'scc' && (
-                <div className="relative h-16 w-full border-t border-gray-100 pt-2">
-                    <div className="absolute top-1 left-0 text-xs font-bold text-gray-400 uppercase tracking-wider">
+            {sectionId === 'scc' && (
+                <div className="w-full">
+                    <div className="mb-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                         Components ({components?.length || 0})
                     </div>
-                    <div className="flex items-center gap-2 w-full mt-5 overflow-x-auto px-2 scrollbar-hide">
+                    <div className="flex items-center gap-2 w-full overflow-x-auto px-1 scrollbar-hide min-h-[44px]">
                         <AnimatePresence>
                             {components?.map((comp, index) => (
                                 <motion.div
@@ -498,9 +559,13 @@ const DataStructurePanel = ({ constraintsRef }) => {
                                 >
                                     <span className="text-xs font-bold text-purple-700 mr-1">C{index + 1}:</span>
                                     {comp.map(nodeId => (
-                                        <span key={nodeId} className="text-xs font-medium text-purple-900">
+                                        <motion.div
+                                            key={nodeId}
+                                            layoutId={`scc-token-${nodeId}`}
+                                            className="text-xs font-medium text-purple-900 px-1.5 py-0.5 rounded bg-white/80 border border-purple-200"
+                                        >
                                             {nodeLabelMap[nodeId] || nodeId}
-                                        </span>
+                                        </motion.div>
                                     ))}
                                 </motion.div>
                             ))}
@@ -508,29 +573,31 @@ const DataStructurePanel = ({ constraintsRef }) => {
                         {(!components || components.length === 0) && <div className="text-gray-400 text-sm italic w-full text-center mt-2">No components found</div>}
                     </div>
                 </div>
-            )}
+                )}
 
-            {/* AP Algorithm State (Discovery / Low-Link) */}
-            {selectedAlgorithm === 'articulationPoints' && (
+                {sectionId === 'ap' && (
                 <APStateTable internalState={internalState} nodeLabelMap={nodeLabelMap} />
-            )}
+                )}
 
-            {/* Floyd-Warshall Matrix */}
-            {isFloydWarshall && (
+                {sectionId === 'floyd' && (
                 <FloydWarshallState internalState={internalState} nodeLabelMap={nodeLabelMap} nodes={nodes} />
-            )}
+                )}
 
-            {/* Distance Vector / Link State Routing */}
-            {isRoutingAlgorithm && (
+                {sectionId === 'routing' && (
                 <RoutingAlgorithmState 
                     lsdb={lsdb} 
                     routingTable={routingTable} 
                     activeTableNodeId={activeTableNodeId}
                     nodeLabelMap={nodeLabelMap}
                     selectedAlgorithm={selectedAlgorithm}
+                    internalState={internalState}
                 />
-            )}
-            </div>
+                )}
+
+                    </Reorder.Item>
+                ))}
+                </Reorder.Group>
+            </LayoutGroup>
 
             <button
                 type="button"
