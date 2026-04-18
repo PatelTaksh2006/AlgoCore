@@ -1,21 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { memo, useRef, useState } from 'react';
 // eslint-disable-next-line no-unused-vars
 import { motion } from 'framer-motion';
 import { cn } from '../utils/cn';
-import useGraphStore from '../store/useGraphStore';
 import { useGraph } from '../context/GraphContext';
 import InteractionModal from './InteractionModal';
 
-const Node = ({ node, updatePos, isHighlighted }) => {
-    const { internalState, resultData } = useGraphStore();
+const Node = ({ node, updatePos, isPathNode = false }) => {
     const { selectedNodeForEdge, setSelectedNodeForEdge, addEdge, updateNodeLabel, removeNode } = useGraph();
     const [showEditModal, setShowEditModal] = useState(false);
     const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
     const isDraggingRef = useRef(false);
     const dragStateRef = useRef(null);
-
-    // Determine if this node is part of the final shortest path overlay
-    const isPathNode = resultData?.type === 'dijkstraPath' && resultData.pathNodes.includes(node.id);
     
     // Check if this node is selected for edge creation
     const isSelectedForEdge = selectedNodeForEdge === node.id;
@@ -156,4 +151,4 @@ const Node = ({ node, updatePos, isHighlighted }) => {
     );
 };
 
-export default Node;
+export default memo(Node);

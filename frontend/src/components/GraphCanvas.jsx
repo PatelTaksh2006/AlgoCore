@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { useGraph } from '../context/GraphContext';
 import Node from './Node';
 import Edge from './Edge';
@@ -6,8 +6,23 @@ import useGraphStore from '../store/useGraphStore';
 
 const GraphCanvas = () => {
     const { nodes, edges, updateNodePos, isDirected, addNode, selectedNodeForEdge, setSelectedNodeForEdge } = useGraph();
-    const { resultData } = useGraphStore();
+    const resultData = useGraphStore((state) => state.resultData);
     const canvasRef = useRef(null);
+
+    const nodeById = useMemo(() => {
+        const map = new Map();
+        for (const node of nodes) {
+            map.set(node.id, node);
+        }
+        return map;
+    }, [nodes]);
+
+    const pathNodeSet = useMemo(() => {
+        if (resultData?.type !== 'dijkstraPath' || !Array.isArray(resultData.pathNodes)) {
+            return new Set();
+        }
+        return new Set(resultData.pathNodes);
+    }, [resultData]);
 
     const handleDoubleClick = (e) => {
         if (!canvasRef.current) return;
@@ -63,18 +78,16 @@ const GraphCanvas = () => {
                     <Edge
                         key={edge.id}
                         edge={edge}
-                        sourceNode={nodes.find(n => n.id === edge.source)}
-                        targetNode={nodes.find(n => n.id === edge.target)}
+                        sourceNode={nodeById.get(edge.source)}
+                        targetNode={nodeById.get(edge.target)}
                         isDirected={isDirected}
                     />
                 ))}
                 
                 {/* Highlighted Dijkstra Path Overlay */}
                 {resultData?.type === 'dijkstraPath' && resultData.pathEdges.map((edge, idx) => {
-                    if (idx === 0) console.log("CANVAS_TRACE: Rendering Dijkstra Path overlay for", resultData.pathEdges.length, "edges.");
-                    
-                    const sourceNode = nodes.find(n => n.id === edge.source);
-                    const targetNode = nodes.find(n => n.id === edge.target);
+                    const sourceNode = nodeById.get(edge.source);
+                    const targetNode = nodeById.get(edge.target);
                     if (!sourceNode || !targetNode) return null;
 
                     // Calculate path exactly like Edge.jsx does (ignoring curvature for straight simple path)
@@ -110,6 +123,7 @@ const GraphCanvas = () => {
                     key={node.id}
                     node={node}
                     updatePos={updateNodePos}
+                    isPathNode={pathNodeSet.has(node.id)}
                 />
             ))}
 

@@ -1,16 +1,51 @@
-# React + Vite
+# SDP Service-Based Implementation
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This folder contains a service-oriented split of your app, built **only** in this directory:
 
-Currently, two official plugins are available:
+- `frontend` (Vite + React UI)
+- `services/gateway-service` (single entry point for clients)
+- `services/graph-service` (graph state API)
+- `services/algorithm-service` (algorithm execution API)
+- `shared/algorithms` (reused algorithm logic)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Service Communication
 
-## React Compiler
+- Frontend calls `gateway-service` via `/api/*` (proxied in Vite).
+- `gateway-service` forwards graph requests to `graph-service`.
+- `gateway-service` forwards run requests to `algorithm-service`.
+- `algorithm-service` can pull graph data directly from `graph-service` using `/run-from-graph`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Ports
 
-## Expanding the ESLint configuration
+- Gateway: `4000`
+- Graph Service: `4001`
+- Algorithm Service: `4002`
+- Frontend (Vite): `5173`
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Run
+
+```bash
+cd C:\Users\taksh\Desktop\sdp
+npm install
+npm run dev
+```
+
+This starts all services and the frontend together.
+
+## Validate Inter-Service Flow
+
+With services running:
+
+```bash
+cd C:\Users\taksh\Desktop\sdp
+npm run smoke
+```
+
+The smoke test verifies:
+1. gateway health
+2. graph write through gateway -> graph-service
+3. algorithm run through gateway -> algorithm-service -> graph-service
+
+## Important
+
+No changes were made in your original `AlgoCore` folder for this implementation. All service-based code is inside this `sdp` folder.

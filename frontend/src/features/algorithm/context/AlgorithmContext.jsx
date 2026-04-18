@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { useGraph } from './GraphContext';
-import * as algorithms from '../algorithms';
-import useGraphStore from '../store/useGraphStore';
-import { saveAlgorithmState, loadAlgorithmState } from '../utils/persistenceUtils';
+import { useGraph } from '../../graph/context/GraphContext';
+import * as algorithms from '../../../algorithms';
+import useGraphStore from '../../../store/useGraphStore';
+import { saveAlgorithmState, loadAlgorithmState } from '../../../utils/persistenceUtils';
 
 const AlgorithmContext = createContext();
 

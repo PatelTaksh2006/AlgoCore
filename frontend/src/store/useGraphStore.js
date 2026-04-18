@@ -88,7 +88,14 @@ const useGraphStore = create((set, get) => ({
         lsdb: [...state.lsdb, lsa]
     })),
 
-    setInternalState: (internalState) => set({ internalState }),
+    setInternalState: (internalState) => set((state) => ({
+        internalState: internalState === null
+            ? null
+            : {
+                ...(state.internalState || {}),
+                ...internalState,
+            }
+    })),
     
     setResultData: (resultData) => set({ resultData }),
     

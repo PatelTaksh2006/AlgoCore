@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { saveGraphState, loadGraphState } from '../utils/persistenceUtils';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { saveGraphState, loadGraphState } from '../../../utils/persistenceUtils';
 
 const GraphContext = createContext();
 
@@ -13,10 +13,23 @@ export const GraphProvider = ({ children }) => {
     const [edges, setEdges] = useState(initialState?.edges ?? []);
     const [isDirected, setIsDirected] = useState(initialState?.isDirected ?? false);
     const [selectedNodeForEdge, setSelectedNodeForEdge] = useState(null); // For two-click edge creation
+    const persistTimeoutRef = useRef(null);
 
     // Save graph state to localStorage whenever it changes
     useEffect(() => {
-        saveGraphState(nodes, edges, isDirected);
+        if (persistTimeoutRef.current) {
+            clearTimeout(persistTimeoutRef.current);
+        }
+
+        persistTimeoutRef.current = setTimeout(() => {
+            saveGraphState(nodes, edges, isDirected);
+        }, 150);
+
+        return () => {
+            if (persistTimeoutRef.current) {
+                clearTimeout(persistTimeoutRef.current);
+            }
+        };
     }, [nodes, edges, isDirected]);
 
     const addNode = useCallback((x, y) => {
@@ -34,7 +47,21 @@ export const GraphProvider = ({ children }) => {
     }, []);
 
     const updateNodePos = useCallback((id, x, y) => {
-        setNodes((prev) => prev.map(n => n.id === id ? { ...n, x, y } : n));
+        setNodes((prev) => {
+            const nodeIndex = prev.findIndex((node) => node.id === id);
+            if (nodeIndex === -1) {
+                return prev;
+            }
+
+            const existingNode = prev[nodeIndex];
+            if (existingNode.x === x && existingNode.y === y) {
+                return prev;
+            }
+
+            const nextNodes = [...prev];
+            nextNodes[nodeIndex] = { ...existingNode, x, y };
+            return nextNodes;
+        });
     }, []);
 
     const addEdge = useCallback((sourceId, targetId, weight = 1) => {
