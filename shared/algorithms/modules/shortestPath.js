@@ -157,9 +157,15 @@ export function* dijkstra(nodes, edges, startNodeId, targetNodeId) {
                 yield { type: 'SET_NODE_COLOR', nodeId: pn, color: '#22c55e' };
             }
 
+            // Build dist labels for display
+            const distLabels = {};
+            for (const n of nodes) {
+                distLabels[n.id] = dist[n.id] === Infinity ? Infinity : dist[n.id];
+            }
+
             yield { 
                 type: 'SET_RESULT_DATA', 
-                data: { type: 'dijkstraPath', pathNodes, pathEdges } 
+                data: { type: 'dijkstraPath', pathNodes, pathEdges, dist: distLabels, startNodeId } 
             };
 
             yield { type: 'LOG', message: `Shortest path: ${pathNodes.map(id => nodes.find(n => n.id === id)?.label).join(' → ')}` };
@@ -216,6 +222,16 @@ export function* dijkstra(nodes, edges, startNodeId, targetNodeId) {
         // Loop Line 2
         yield { type: 'SET_LINE', lineIndex: 2 };
     }
+
+    // Emit final dist array when no target or target not reached
+    const finalDistLabels = {};
+    for (const n of nodes) {
+        finalDistLabels[n.id] = dist[n.id] === Infinity ? Infinity : dist[n.id];
+    }
+    yield {
+        type: 'SET_RESULT_DATA',
+        data: { type: 'dijkstraPath', pathNodes: [], pathEdges: [], dist: finalDistLabels, startNodeId }
+    };
 
     yield { type: 'LOG', message: 'Dijkstra Completed' };
     yield { type: 'SET_LINE', lineIndex: -1 };

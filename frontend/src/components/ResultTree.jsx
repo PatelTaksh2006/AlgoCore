@@ -455,9 +455,11 @@ const ResultTree = () => {
         lastPackedComponentCountRef.current = discoveredComponents.length;
     }, [components, panelSize.height, panelSize.width, selectedAlgorithm]);
 
+    const isDijkstraResult = selectedAlgorithm === 'dijkstra' && resultData?.type === 'dijkstraPath' && resultData.dist;
+
     return (
-        <div ref={panelRef} className={`w-full h-full bg-gray-50 border-l border-gray-200 ${isArticulationMode ? 'flex flex-col' : 'relative overflow-hidden'}`}>
-            <div className={isArticulationMode ? 'relative flex-1 overflow-hidden' : 'w-full h-full relative overflow-hidden'}>
+        <div ref={panelRef} className={`w-full h-full bg-gray-50 border-l border-gray-200 ${(isArticulationMode || isDijkstraResult) ? 'flex flex-col' : 'relative overflow-hidden'}`}>
+            <div className={(isArticulationMode || isDijkstraResult) ? 'relative flex-1 overflow-hidden' : 'w-full h-full relative overflow-hidden'}>
             <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-gray-500 shadow-sm z-10">
                 RESULT TREE
             </div>
@@ -763,6 +765,8 @@ const ResultTree = () => {
                 </div>
             )}
 
+
+
             {isArticulationMode && (
                 <div className="h-56 border-t border-gray-200 bg-white/85 backdrop-blur-sm px-4 py-3 overflow-y-auto">
                     <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-orange-500">
@@ -1006,6 +1010,42 @@ const ResultTree = () => {
                             </motion.div>
                         ))}
                     </div>
+                </div>
+            )}
+            {isDijkstraResult && (
+                <div className="border-t border-blue-200 bg-white px-4 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600 mb-2">
+                        Optimal dist[] from {nodeLabelMap[resultData.startNodeId] || resultData.startNodeId}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {nodes.map((node) => {
+                            const d = resultData.dist[node.id];
+                            const isSource = node.id === resultData.startNodeId;
+                            const isOnPath = resultData.pathNodes?.includes(node.id);
+                            return (
+                                <span
+                                    key={`dijkstra-dist-${node.id}`}
+                                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${
+                                        isSource
+                                            ? 'border-green-300 bg-green-50 text-green-700'
+                                            : isOnPath
+                                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                                            : 'border-blue-200 bg-blue-50 text-blue-700'
+                                    }`}
+                                >
+                                    {node.label}: {d === Infinity ? '\u221e' : d}
+                                </span>
+                            );
+                        })}
+                    </div>
+                    {resultData.pathNodes?.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-blue-100 text-[10px] text-blue-600 font-medium">
+                            Shortest Path: {resultData.pathNodes.map(id => nodeLabelMap[id] || id).join(' \u2192 ')}
+                            <span className="ml-2 font-bold">
+                                (cost: {resultData.dist[resultData.pathNodes[resultData.pathNodes.length - 1]] === Infinity ? '\u221e' : resultData.dist[resultData.pathNodes[resultData.pathNodes.length - 1]]})
+                            </span>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

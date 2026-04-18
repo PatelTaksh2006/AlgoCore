@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Check, ArrowRight } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -14,6 +14,7 @@ const InteractionModal = ({
 }) => {
     const modalRef = useRef(null);
     const [formData, setFormData] = useState({});
+    const [adjustedPos, setAdjustedPos] = useState({ x: 0, y: 0 });
 
     // Initialize form data when data prop changes
     useEffect(() => {
@@ -21,6 +22,57 @@ const InteractionModal = ({
             setFormData({ ...data });
         }
     }, [data]);
+
+    // Adjust position to stay within viewport
+    useLayoutEffect(() => {
+        if (!isOpen || !modalRef.current) {
+            setAdjustedPos(position);
+            return;
+        }
+
+        // Wait a frame for the modal to render so we can measure it
+        requestAnimationFrame(() => {
+            if (!modalRef.current) return;
+
+            const rect = modalRef.current.getBoundingClientRect();
+            const modalWidth = rect.width;
+            const modalHeight = rect.height;
+            const padding = 12;
+
+            let x = position.x;
+            let y = position.y;
+
+            // Default: center horizontally, position above click point
+            let finalX = x;
+            let finalY = y - modalHeight - 10;
+
+            // If it goes above viewport, flip to below
+            if (finalY < padding) {
+                finalY = y + 20;
+            }
+
+            // If it goes below viewport, clamp
+            if (finalY + modalHeight > window.innerHeight - padding) {
+                finalY = window.innerHeight - modalHeight - padding;
+            }
+
+            // Keep within horizontal bounds (modal is centered with -translate-x-1/2)
+            const halfWidth = modalWidth / 2;
+            if (finalX - halfWidth < padding) {
+                finalX = halfWidth + padding;
+            }
+            if (finalX + halfWidth > window.innerWidth - padding) {
+                finalX = window.innerWidth - halfWidth - padding;
+            }
+
+            setAdjustedPos({ x: finalX, y: finalY });
+        });
+    }, [isOpen, position]);
+
+    const handleSave = useCallback(() => {
+        onSave(formData);
+        onClose();
+    }, [formData, onSave, onClose]);
 
     // Handle click outside
     useEffect(() => {
@@ -38,13 +90,14 @@ const InteractionModal = ({
         };
     }, [isOpen, onClose]);
 
-    // Handle Escape key
+    // Handle Escape + Enter keys
     useEffect(() => {
         const handleKeyDown = (event) => {
             if (event.key === 'Escape') {
                 onClose();
             }
             if (event.key === 'Enter') {
+                event.preventDefault();
                 handleSave();
             }
         };
@@ -55,20 +108,13 @@ const InteractionModal = ({
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [isOpen]); // Added correct dependencies in next step if needed, or handleSave wrapper
-
-    const handleSave = () => {
-        onSave(formData);
-        onClose();
-    };
+    }, [isOpen, onClose, handleSave]);
 
     if (!isOpen) return null;
 
-    // Calculate position styles to keep it on screen
-    // Simple offset for now, could use a library like floating-ui if needed
     const style = {
-        left: position.x,
-        top: position.y,
+        left: adjustedPos.x,
+        top: adjustedPos.y,
     };
 
     const modalContent = (
@@ -79,7 +125,7 @@ const InteractionModal = ({
             transition={{ type: 'spring', duration: 0.3 }}
             style={style}
             ref={modalRef}
-            className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-64 transform -translate-x-1/2 -translate-y-full mt-[-10px]"
+            className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-64 transform -translate-x-1/2"
             onClick={(e) => e.stopPropagation()} // Prevent click through
         >
             <div className="flex justify-between items-center mb-3">
@@ -110,8 +156,15 @@ const InteractionModal = ({
                         <label className="text-xs text-gray-500">Weight</label>
                         <input
                             type="number"
-                            value={formData.weight || 1}
+                            value={formData.weight ?? ''}
                             onChange={(e) => setFormData(prev => ({ ...prev, weight: e.target.value }))}
+                            onBlur={(e) => {
+                                // If empty or invalid on blur, default to 1
+                                const val = parseInt(e.target.value);
+                                if (isNaN(val) || e.target.value === '') {
+                                    setFormData(prev => ({ ...prev, weight: 1 }));
+                                }
+                            }}
                             className="w-full p-2 border rounded text-sm focus:border-blue-500 outline-none"
                             autoFocus
                         />

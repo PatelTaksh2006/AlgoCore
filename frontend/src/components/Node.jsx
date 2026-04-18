@@ -5,7 +5,7 @@ import { cn } from '../utils/cn';
 import { useGraph } from '../context/GraphContext';
 import InteractionModal from './InteractionModal';
 
-const Node = ({ node, updatePos, isPathNode = false }) => {
+const Node = ({ node, updatePos, isPathNode = false, zoom = 1 }) => {
     const { selectedNodeForEdge, setSelectedNodeForEdge, addEdge, updateNodeLabel, removeNode } = useGraph();
     const [showEditModal, setShowEditModal] = useState(false);
     const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
@@ -74,7 +74,7 @@ const Node = ({ node, updatePos, isPathNode = false }) => {
                 dragState.hasMoved = true;
             }
 
-            updatePos(node.id, dragState.startNodeX + dx, dragState.startNodeY + dy);
+            updatePos(node.id, dragState.startNodeX + dx / zoom, dragState.startNodeY + dy / zoom);
         };
 
         const handlePointerUp = () => {
