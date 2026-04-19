@@ -1,51 +1,72 @@
-# SDP Service-Based Implementation
+# AlgoCore
 
-This folder contains a service-oriented split of your app, built **only** in this directory:
+AlgoCore is a frontend-only React app for graph algorithm visualization.
 
-- `frontend` (Vite + React UI)
-- `services/gateway-service` (single entry point for clients)
-- `services/graph-service` (graph state API)
-- `services/algorithm-service` (algorithm execution API)
-- `shared/algorithms` (reused algorithm logic)
+## Architecture
 
-## Service Communication
+The codebase is organized around three modules under `frontend/src/modules`:
 
-- Frontend calls `gateway-service` via `/api/*` (proxied in Vite).
-- `gateway-service` forwards graph requests to `graph-service`.
-- `gateway-service` forwards run requests to `algorithm-service`.
-- `algorithm-service` can pull graph data directly from `graph-service` using `/run-from-graph`.
+- `graph`: graph domain model, graph state/context, and graph canvas UI.
+- `algorithm`: algorithm implementations, protocol, engine, and registry.
+- `simulation`: controller/interpreter and visualization panels/results.
 
-## Ports
+Data flow is unidirectional:
 
-- Gateway: `4000`
-- Graph Service: `4001`
-- Algorithm Service: `4002`
-- Frontend (Vite): `5173`
+`Graph -> Algorithm Engine -> Step Output -> Interpreter -> Store -> UI`
 
-## Run
+## Key Structure
+
+```text
+frontend/
+	src/
+		modules/
+			algorithm/
+				context/
+				core/
+				engine/
+				implementations/
+					traversal/
+					shortestPath/
+					mst/
+					routing/
+					connectivity/
+				protocol/
+					stepProtocol.ts
+				registry/
+			graph/
+				model/
+				context/
+				components/
+			simulation/
+				controller/
+				interpreter/
+				components/
+					core/
+					results/
+					apspResult/
+					connectivityResult/
+					dataStructurePanel/
+					resultTree/
+```
+
+## Development
 
 ```bash
-cd C:\Users\taksh\Desktop\sdp
+cd frontend
 npm install
 npm run dev
 ```
 
-This starts all services and the frontend together.
-
-## Validate Inter-Service Flow
-
-With services running:
+## Build
 
 ```bash
-cd C:\Users\taksh\Desktop\sdp
-npm run smoke
+cd frontend
+npm run build
 ```
 
-The smoke test verifies:
-1. gateway health
-2. graph write through gateway -> graph-service
-3. algorithm run through gateway -> algorithm-service -> graph-service
+## Add a New Algorithm
 
-## Important
-
-No changes were made in your original `AlgoCore` folder for this implementation. All service-based code is inside this `sdp` folder.
+1. Add implementation in `frontend/src/modules/algorithm/implementations/<category>/`.
+2. Export it from that category `index.js`.
+3. Register it in `frontend/src/modules/algorithm/registry/algorithms.js`.
+4. Add pseudocode in `frontend/src/modules/algorithm/registry/pseudocode.js`.

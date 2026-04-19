@@ -4,17 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "workspaces": [
-    "frontend",
-    "services/*"
+    "frontend"
   ],
   "scripts": {
-    "predev": "node scripts/ensure-dev-ports.mjs",
-    "dev": "npm run predev && concurrently -n gateway,graph,algo,frontend -c cyan,green,yellow,magenta \"npm run dev --workspace services/gateway-service\" \"npm run dev --workspace services/graph-service\" \"npm run dev --workspace services/algorithm-service\" \"npm run dev --workspace frontend\"",
-    "dev:services": "npm run predev && concurrently -n gateway,graph,algo -c cyan,green,yellow \"npm run dev --workspace services/gateway-service\" \"npm run dev --workspace services/graph-service\" \"npm run dev --workspace services/algorithm-service\"",
-    "build": "npm run build --workspace frontend",
-    "smoke": "node scripts/smoke-test.mjs"
-  },
-  "devDependencies": {
-    "concurrently": "^9.2.1"
+    "dev": "npm run dev --workspace frontend",
+    "build": "npm run build --workspace frontend"
   }
 }

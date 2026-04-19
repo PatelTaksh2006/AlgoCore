@@ -145,7 +145,6 @@ export const saveStoreState = (storeState) => {
       lsdb: storeState.lsdb,
       resultData: storeState.resultData,
       internalState: storeState.internalState,
-      resultLayout: storeState.resultLayout,
       timestamp: new Date().toISOString(),
     };
     localStorage.setItem(STORAGE_KEYS.STORE, JSON.stringify(stateToSave));
@@ -171,7 +170,6 @@ export const loadStoreState = () => {
         lsdb: data.lsdb ?? [],
         resultData: data.resultData ?? null,
         internalState: data.internalState ?? null,
-        resultLayout: data.resultLayout ?? {},
       };
     }
   } catch (error) {

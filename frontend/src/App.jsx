@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import GraphCanvas from './components/GraphCanvas';
-import Sidebar from './components/Sidebar';
-import RoutingTable from './components/RoutingTable';
-import ResultPanel from './components/ResultPanel';
-import DataStructurePanel from './components/DataStructurePanel';
-import { useAlgorithm } from './context/AlgorithmContext';
+import GraphCanvas from './modules/graph/components/GraphCanvas';
+import Sidebar from './modules/simulation/components/core/Sidebar';
+import RoutingTable from './modules/simulation/components/core/RoutingTable';
+import DataStructurePanel from './modules/simulation/components/core/DataStructurePanel';
+import ResultPanel from './modules/simulation/components/results/ResultPanel';
+import { useAlgorithm } from './modules/algorithm/context/AlgorithmContext';
 
 function App() {
   // eslint-disable-next-line no-unused-vars
