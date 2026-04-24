@@ -183,7 +183,7 @@ export const SAMPLES = {
             { id: 'e3', source: 'node-2', target: 'node-3', weight: 2 },
             { id: 'e4', source: 'node-2', target: 'node-4', weight: 5 },
             { id: 'e5', source: 'node-3', target: 'node-4', weight: 1 },
-            { id: 'e6', source: 'node-4', target: 'node-1', weight: 7 }
+            { id: 'e6', source: 'node-4', target: 'node-1', weight: -7 }
         ]
     }
 };

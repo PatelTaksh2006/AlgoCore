@@ -1,11 +1,13 @@
 import React, { useMemo, useEffect, useRef } from 'react';
 import { useGraph } from '../../../graph/context/GraphContext';
+import { useAlgorithm } from '../../../algorithm/context/AlgorithmContext';
 import useSimulationStore from '../../../../store/useSimulationStore';
 import { ArrowRight } from 'lucide-react'; // Assuming we can use icons or just text
 
 const RoutingTable = () => {
     const { nodes } = useGraph();
-    const { routingTable, activeTableNodeId } = useSimulationStore();
+    const { selectedAlgorithm, startNodeId } = useAlgorithm();
+    const { routingTable, activeTableNodeId, internalState } = useSimulationStore();
     const scrollContainerRef = useRef(null);
 
     // Flatten data for display: [ { nodeId, destinations: [ { destId, dist, nextHop } ] } ]
@@ -25,15 +27,41 @@ const RoutingTable = () => {
         });
     }, [nodes, routingTable]);
 
+    const visibleTableData = useMemo(() => {
+        if (selectedAlgorithm !== 'linkState') {
+            return tableData;
+        }
+
+        const sourceNodeId = startNodeId || nodes[0]?.id;
+        if (!sourceNodeId) {
+            return tableData;
+        }
+
+        const routingPhase = internalState?.routingPhase;
+
+        // Until Link State completes, keep all tables visible (neighbor/flooding/spf).
+        if (routingPhase !== 'completed') {
+            return tableData;
+        }
+
+        // At the end of Link State, only show the route/source node table.
+        return tableData.filter((row) => row.nodeId === sourceNodeId);
+    }, [activeTableNodeId, internalState, nodes, selectedAlgorithm, startNodeId, tableData]);
+
     useEffect(() => {
-        if (activeTableNodeId !== null && scrollContainerRef.current) {
+        if (activeTableNodeId === null || !scrollContainerRef.current) {
+            return;
+        }
+
+        const frameId = requestAnimationFrame(() => {
             const el = document.getElementById(`routing-table-${activeTableNodeId}`);
             if (el) {
-                // Scroll the element into view within its container
-                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
-        }
-    }, [activeTableNodeId]);
+        });
+
+        return () => cancelAnimationFrame(frameId);
+    }, [activeTableNodeId, routingTable]);
 
     if (!nodes.length) {
         return (
@@ -51,7 +79,7 @@ const RoutingTable = () => {
             </div>
 
             <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 space-y-6">
-                {tableData.map(nodeData => {
+                {visibleTableData.map(nodeData => {
                     const isActive = nodeData.nodeId === activeTableNodeId;
                     return (
                         <div

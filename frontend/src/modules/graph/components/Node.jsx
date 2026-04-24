@@ -3,10 +3,12 @@ import React, { memo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '../../../utils/cn';
 import { useGraph } from '../context/GraphContext';
+import { useAlgorithm } from '../../algorithm/context/AlgorithmContext';
 import InteractionModal from './InteractionModal';
 
 const Node = ({ node, updatePos, isPathNode = false, zoom = 1 }) => {
     const { selectedNodeForEdge, setSelectedNodeForEdge, addEdge, updateNodeLabel, removeNode } = useGraph();
+    const { isPlaying } = useAlgorithm();
     const [showEditModal, setShowEditModal] = useState(false);
     const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
     const isDraggingRef = useRef(false);
@@ -16,6 +18,10 @@ const Node = ({ node, updatePos, isPathNode = false, zoom = 1 }) => {
     const isSelectedForEdge = selectedNodeForEdge === node.id;
 
     const handleClick = (e) => {
+        if (isPlaying) {
+            return;
+        }
+
         // Don't handle click if we were dragging
         if (isDraggingRef.current) {
             isDraggingRef.current = false;
@@ -39,6 +45,10 @@ const Node = ({ node, updatePos, isPathNode = false, zoom = 1 }) => {
     };
 
     const handleDoubleClick = (e) => {
+        if (isPlaying) {
+            return;
+        }
+
         e.stopPropagation();
         // Open edit modal
         setModalPosition({ x: e.clientX, y: e.clientY });
@@ -51,6 +61,10 @@ const Node = ({ node, updatePos, isPathNode = false, zoom = 1 }) => {
     };
 
     const handlePointerDown = (event) => {
+        if (isPlaying) {
+            return;
+        }
+
         if (event.button !== 0) return;
         event.stopPropagation();
 
@@ -100,32 +114,42 @@ const Node = ({ node, updatePos, isPathNode = false, zoom = 1 }) => {
     };
 
     const handleSave = (data) => {
+        if (isPlaying) {
+            return;
+        }
+
         if (data.label !== undefined) {
             updateNodeLabel(node.id, data.label);
         }
     };
 
     const handleDelete = () => {
+        if (isPlaying) {
+            return;
+        }
+
         removeNode(node.id);
     };
 
     return (
         <>
             <motion.div
+                data-pan-block="true"
                 onPointerDown={handlePointerDown}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
                 initial={false}
                 animate={{
-                    scale: (node.color || isPathNode || isSelectedForEdge) ? 1.1 : 1,
-                    borderColor: isSelectedForEdge ? '#8b5cf6' : isPathNode ? '#22c55e' : (node.color || '#e5e7eb'),
-                    backgroundColor: isSelectedForEdge ? '#ede9fe' : isPathNode ? '#dcfce7' : (node.color ? '#eff6ff' : '#ffffff'),
-                    borderWidth: isSelectedForEdge ? 4 : isPathNode ? 4 : 2,
+                    scale: isSelectedForEdge ? 1.1 : 1,
+                    borderColor: isSelectedForEdge ? '#8b5cf6' : '#e5e7eb',
+                    backgroundColor: isSelectedForEdge ? '#ede9fe' : '#ffffff',
+                    borderWidth: isSelectedForEdge ? 4 : 2,
                     boxShadow: isSelectedForEdge ? '0 0 12px rgba(139, 92, 246, 0.5)' : undefined
                 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 28, mass: 0.35 }}
                 className={cn(
-                    "absolute w-12 h-12 rounded-full border flex items-center justify-center shadow-md cursor-grab active:cursor-grabbing select-none z-10"
+                    "absolute w-12 h-12 rounded-full border flex items-center justify-center shadow-md select-none z-10",
+                    isPlaying ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
                 )}
                 style={{
                     left: node.x,

@@ -90,6 +90,15 @@ export function useSimulationController({
   }, [isCompleted, createGenerator, currentStep]);
 
   const nextStep = useCallback(() => {
+    if (currentStep < history.length) {
+      const batch = history[currentStep] || [];
+      batch.forEach((step) => applyStep(step));
+      setCurrentStep((prev) => prev + 1);
+      setIsCompleted(false);
+      setHasStartedRun(true);
+      return;
+    }
+
     if (!generatorRef.current) {
       return;
     }
@@ -117,6 +126,7 @@ export function useSimulationController({
       setHistory((prev) => [...prev, batch]);
       setCurrentStep((prev) => prev + 1);
       setIsCompleted(false);
+      setHasStartedRun(true);
     }
 
     if (done) {
@@ -124,7 +134,7 @@ export function useSimulationController({
       setIsCompleted(true);
       setHasStartedRun(false);
     }
-  }, [applyStep]);
+  }, [applyStep, currentStep, history]);
 
   const prevStep = useCallback(() => {
     if (currentStep <= 0) {

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGraph } from '../../graph/context/GraphContext';
 import useSimulationStore from '../../../store/useSimulationStore';
@@ -7,13 +7,16 @@ import { useAlgorithm } from '../../algorithm/context/AlgorithmContext';
 import TreeEdgeLegend from './resultTree/TreeEdgeLegend';
 
 const ResultTree = () => {
-  const { nodes, edges, isDirected } = useGraph();
+  const { nodes, edges, isDirected, isTransposedView } = useGraph();
   const { backEdges, resultData } = useSimulationStore();
-  const { selectedAlgorithm, startNodeId } = useAlgorithm();
+  const { selectedAlgorithm, startNodeId, components } = useAlgorithm();
   const panelRef = useRef(null);
   const showAnimatedBackEdges = selectedAlgorithm === 'dfs' && backEdges.length > 0;
 
   const [manualPositions, setManualPositions] = useState({});
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
   const classifiedTreeEdges = useMemo(() => (
     edges.filter((e) => (
@@ -65,6 +68,91 @@ const ResultTree = () => {
     return map;
   }, [nodes]);
 
+  const sccClusterBoundaries = useMemo(() => {
+    if (selectedAlgorithm !== 'scc' || !Array.isArray(components) || components.length === 0) {
+      return [];
+    }
+
+    return components
+      .filter((component) => Array.isArray(component) && component.length >= 2)
+      .map((component, index) => {
+        const points = component
+          .map((nodeId) => manualPositions[nodeId] || positions[nodeId])
+          .filter(Boolean);
+
+        if (points.length < 2) {
+          return null;
+        }
+
+        const center = points.reduce((acc, point) => ({
+          x: acc.x + point.x,
+          y: acc.y + point.y,
+        }), { x: 0, y: 0 });
+
+        const cx = center.x / points.length;
+        const cy = center.y / points.length;
+
+        const maxDistance = points.reduce((max, point) => {
+          const dist = Math.hypot(point.x - cx, point.y - cy);
+          return Math.max(max, dist);
+        }, 0);
+
+        return {
+          id: `scc-cluster-${index}`,
+          label: `SCC ${index + 1}`,
+          nodeIds: component,
+          cx,
+          cy,
+          r: Math.max(40, maxDistance + 28),
+        };
+      })
+      .filter(Boolean);
+  }, [components, manualPositions, positions, selectedAlgorithm]);
+
+  const handleClusterPointerDown = useCallback((event, nodeIds) => {
+    event.stopPropagation();
+    event.preventDefault();
+
+    if (event.button !== 0) {
+      return;
+    }
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const initialPositions = {};
+
+    nodeIds.forEach((nodeId) => {
+      const basePos = manualPositions[nodeId] || positions[nodeId];
+      if (basePos) {
+        initialPositions[nodeId] = { x: basePos.x, y: basePos.y };
+      }
+    });
+
+    const handlePointerMove = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+
+      setManualPositions((prev) => {
+        const next = { ...prev };
+        Object.entries(initialPositions).forEach(([nodeId, pos]) => {
+          next[nodeId] = {
+            x: pos.x + dx,
+            y: pos.y + dy,
+          };
+        });
+        return next;
+      });
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  }, [manualPositions, positions]);
+
   const handleDrag = (id, deltaX, deltaY, pos) => {
     setManualPositions((prev) => {
       const current = prev[id] || pos;
@@ -76,6 +164,48 @@ const ResultTree = () => {
         },
       };
     });
+  };
+
+  const handlePanelMouseDown = (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const isOnInteractiveElement = event.target.closest('[data-pan-block="true"]');
+    if (isOnInteractiveElement) {
+      return;
+    }
+
+    event.preventDefault();
+    isPanningRef.current = true;
+    panStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    };
+
+    const handleMouseMove = (moveEvent) => {
+      if (!isPanningRef.current) {
+        return;
+      }
+
+      const dx = moveEvent.clientX - panStartRef.current.x;
+      const dy = moveEvent.clientY - panStartRef.current.y;
+      setPan({
+        x: panStartRef.current.panX + dx,
+        y: panStartRef.current.panY + dy,
+      });
+    };
+
+    const handleMouseUp = () => {
+      isPanningRef.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   };
 
   const resolveEdgeStyle = (edge) => {
@@ -113,7 +243,7 @@ const ResultTree = () => {
   };
 
   return (
-    <div ref={panelRef} className="w-full h-full bg-gray-50 border-l border-gray-200 relative overflow-hidden">
+    <div ref={panelRef} className="w-full h-full bg-gray-50 border-l border-gray-200 relative overflow-hidden" onMouseDown={handlePanelMouseDown}>
       <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-gray-500 shadow-sm z-10">
         RESULT TREE
       </div>
@@ -126,7 +256,14 @@ const ResultTree = () => {
         </div>
       )}
 
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px)`,
+          transformOrigin: '0 0',
+        }}
+      >
+      <svg className="absolute inset-0 w-full h-full">
         <defs>
           <marker id="tree-arrow" markerWidth="10" markerHeight="7" refX="18" refY="3.5" orient="auto">
             <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
@@ -136,9 +273,42 @@ const ResultTree = () => {
           </marker>
         </defs>
 
+        {sccClusterBoundaries.map((cluster) => (
+          <g
+            key={cluster.id}
+            onPointerDown={(event) => handleClusterPointerDown(event, cluster.nodeIds)}
+            className="pointer-events-auto cursor-move"
+          >
+            <motion.circle
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.25 }}
+              cx={cluster.cx}
+              cy={cluster.cy}
+              r={cluster.r}
+              fill="transparent"
+              stroke="#7c3aed"
+              strokeWidth={2}
+              strokeDasharray="7 5"
+              fillOpacity={0.02}
+            />
+            <text
+              x={cluster.cx}
+              y={cluster.cy - cluster.r - 8}
+              textAnchor="middle"
+              className="fill-violet-600 text-[10px] font-bold tracking-wide pointer-events-none select-none"
+            >
+              {cluster.label}
+            </text>
+          </g>
+        ))}
+
         {edgesToRender.map((edge) => {
-          const sourcePos = manualPositions[edge.source] || positions[edge.source];
-          const targetPos = manualPositions[edge.target] || positions[edge.target];
+          const fromId = isTransposedView ? edge.target : edge.source;
+          const toId = isTransposedView ? edge.source : edge.target;
+
+          const sourcePos = manualPositions[fromId] || positions[fromId];
+          const targetPos = manualPositions[toId] || positions[toId];
           if (!sourcePos || !targetPos) {
             return null;
           }
@@ -147,6 +317,7 @@ const ResultTree = () => {
           return (
             <motion.line
               key={edge.id}
+              data-pan-block="true"
               initial={{ pathLength: 0, opacity: 0 }}
               animate={{ pathLength: 1, opacity: 1 }}
               transition={{ duration: 0.35 }}
@@ -183,6 +354,7 @@ const ResultTree = () => {
           return (
             <motion.path
               key={`back-${edge.id}-${i}`}
+              data-pan-block="true"
               initial={{ pathLength: 0, opacity: 0 }}
               animate={{ pathLength: 1, opacity: 1 }}
               transition={{ duration: 0.7, delay: i * 0.08 }}
@@ -211,6 +383,7 @@ const ResultTree = () => {
         return (
           <motion.div
             key={node.id}
+            data-pan-block="true"
             drag
             dragMomentum={false}
             onDrag={(e, info) => handleDrag(node.id, info.delta.x, info.delta.y, basePos)}
@@ -234,6 +407,7 @@ const ResultTree = () => {
           </motion.div>
         );
       })}
+      </div>
 
       {selectedAlgorithm === 'distanceVector' && dvFinalResult && (
         <div className="absolute left-4 top-14 z-20 rounded-lg border border-purple-200 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-sm">

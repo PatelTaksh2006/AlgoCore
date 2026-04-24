@@ -1,10 +1,11 @@
-import useSimulationStore, { initialSimulationState } from '../../../store/useSimulationStore';
+import useSimulationStore, { emptySimulationState } from '../../../store/useSimulationStore';
 import { STEP_TYPES } from '../../algorithm/protocol/stepProtocol.ts';
 
 export function createStepInterpreter({
   clearClassification,
   setEdgeClassification,
   setNodeColor,
+  setIsTransposedView,
   setCurrentLine,
   setVisited,
   setParent,
@@ -100,6 +101,9 @@ export function createStepInterpreter({
       case STEP_TYPES.SET_RESULT_DATA:
         mutate(() => ({ resultData: stepData.data }));
         break;
+      case STEP_TYPES.SET_TRANSPOSE_VIEW:
+        setIsTransposedView(Boolean(stepData.isTransposed));
+        break;
       default:
         break;
     }
@@ -107,7 +111,8 @@ export function createStepInterpreter({
 
   const resetVisualState = (nodes = []) => {
     clearClassification();
-    useSimulationStore.getState()._applyStep(() => ({ ...initialSimulationState }));
+    setIsTransposedView(false);
+    useSimulationStore.getState()._applyStep(() => ({ ...emptySimulationState }));
     nodes.forEach((node) => setNodeColor(node.id, undefined));
     setCurrentLine(-1);
     setVisited([]);

@@ -86,9 +86,11 @@ const Sidebar = () => {
                         <span className="text-sm text-gray-700">Directed Graph</span>
                         <button
                             onClick={() => setIsDirected(!isDirected)}
+                            disabled={isPlaying}
                             className={cn(
                                 "w-10 h-5 rounded-full relative transition-colors duration-200",
-                                isDirected ? "bg-blue-600" : "bg-gray-300"
+                                isDirected ? "bg-blue-600" : "bg-gray-300",
+                                isPlaying && "opacity-50 cursor-not-allowed"
                             )}
                         >
                             <div className={cn(
@@ -101,13 +103,15 @@ const Sidebar = () => {
                     <div className="grid grid-cols-2 gap-2">
                         <button
                             onClick={handleLoadSample}
-                            className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-sm font-medium transition-colors"
+                            disabled={isPlaying}
+                            className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Load Sample
                         </button>
                         <button
                             onClick={resetGraph}
-                            className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                            disabled={isPlaying}
+                            className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
                             title="Clear Graph"
                         >
                             <Trash2 className="w-4 h-4" /> Clear
@@ -115,7 +119,8 @@ const Sidebar = () => {
                     </div>
                     <button
                         onClick={() => addNode(Math.random() * 300 + 50, Math.random() * 300 + 50)}
-                        className="w-full py-2 px-3 bg-gray-100 hover:bg-gray-200 rounded-md text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors"
+                        disabled={isPlaying}
+                        className="w-full py-2 px-3 bg-gray-100 hover:bg-gray-200 rounded-md text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Plus className="w-4 h-4" /> Add Random Node
                     </button>
@@ -133,8 +138,15 @@ const Sidebar = () => {
                     <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Algorithm</h3>
                     <select
                         value={selectedAlgorithm}
-                        onChange={e => setSelectedAlgorithm(e.target.value)}
-                        className="w-full p-2 border rounded-md text-sm bg-gray-50 outline-none focus:border-blue-500 font-medium"
+                        onChange={e => {
+                            resetAlgorithm();
+                            resetGraph();
+                            setStartNodeId(null);
+                            setTargetNodeId(null);
+                            setSelectedAlgorithm(e.target.value);
+                        }}
+                        disabled={isPlaying}
+                        className="w-full p-2 border rounded-md text-sm bg-gray-50 outline-none focus:border-blue-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <option value="dfs">Depth First Search (DFS)</option>
                         <option value="bfs">Breadth First Search (BFS)</option>
@@ -148,13 +160,14 @@ const Sidebar = () => {
                         <option value="floydWarshall">Floyd-Warshall (APSP)</option>
                     </select>
                     
-                    {selectedAlgorithm !== 'kruskal' && selectedAlgorithm !== 'scc' && (
+                    {selectedAlgorithm !== 'kruskal' && selectedAlgorithm !== 'scc' && selectedAlgorithm !== 'floydWarshall' && (
                         <div className="mt-2 text-sm text-gray-600">
                             Source Node (Optional):
                             <select
                                 value={startNodeId || ''}
                                 onChange={e => setStartNodeId(e.target.value || null)}
-                                className="mt-1 w-full p-2 border rounded-md bg-gray-50 outline-none focus:border-blue-500"
+                                disabled={isPlaying}
+                                className="mt-1 w-full p-2 border rounded-md bg-gray-50 outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <option value="">Auto (First Node)</option>
                                 {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
@@ -168,7 +181,8 @@ const Sidebar = () => {
                             <select
                                 value={targetNodeId || ''}
                                 onChange={e => setTargetNodeId(e.target.value || null)}
-                                className="mt-1 w-full p-2 border rounded-md bg-gray-50 outline-none focus:border-blue-500"
+                                disabled={isPlaying}
+                                className="mt-1 w-full p-2 border rounded-md bg-gray-50 outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <option value="">None</option>
                                 {nodes.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
@@ -180,7 +194,7 @@ const Sidebar = () => {
                 {/* Code Visualization */}
                 <div className="space-y-3 pt-4 border-t border-gray-100">
                     <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Code Execution</h3>
-                    <div className="bg-gray-50 p-2 rounded-md border border-gray-200 font-mono text-xs overflow-hidden h-16 flex flex-col justify-center">
+                    <div className="bg-gray-50 p-2 rounded-md border border-gray-200 font-mono text-xs max-h-40 overflow-y-auto">
                         {(() => {
                             const codeLines = PSEUDOCODE[selectedAlgorithm] || [];
                             const line = currentLine;
@@ -199,11 +213,11 @@ const Sidebar = () => {
                             const next = codeLines[line + 1] || '\u00A0';
 
                             return (
-                                <>
-                                    <div className="text-gray-400 truncate whitespace-nowrap">{prev}</div>
-                                    <div className="text-blue-600 font-bold truncate whitespace-nowrap bg-blue-50 -mx-2 px-2 py-0.5">{curr}</div>
-                                    <div className="text-gray-400 truncate whitespace-nowrap">{next}</div>
-                                </>
+                                <div className="space-y-1">
+                                    <div className="text-gray-400 whitespace-pre-wrap break-words">{prev}</div>
+                                    <div className="text-blue-600 font-bold whitespace-pre-wrap break-words bg-blue-50 -mx-2 px-2 py-0.5 rounded-sm">{curr}</div>
+                                    <div className="text-gray-400 whitespace-pre-wrap break-words">{next}</div>
+                                </div>
                             );
                         })()}
                     </div>
@@ -223,7 +237,8 @@ const Sidebar = () => {
                             step="100"
                             value={speed}
                             onChange={e => setSpeed(Number(e.target.value))}
-                            className="flex-1 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                            disabled={nodes.length === 0}
+                            className="flex-1 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
                         />
                         <span className="text-[10px] text-orange-600 font-medium">Slow</span>
                     </div>
@@ -232,7 +247,7 @@ const Sidebar = () => {
                 <div className="flex gap-2">
                     <button
                         onClick={prevStep}
-                        disabled={currentStep === 0 || isPlaying}
+                        disabled={currentStep === 0 || isPlaying || nodes.length === 0}
                         className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Previous Step"
                     >
@@ -242,7 +257,8 @@ const Sidebar = () => {
                     {!isPlaying ? (
                         <button
                             onClick={handleRunClick}
-                            className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md flex items-center justify-center gap-2 font-medium transition-colors"
+                            disabled={nodes.length === 0}
+                            className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md flex items-center justify-center gap-2 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Play className="w-4 h-4" /> {(hasStartedRun || currentStep > 0) && !isCompleted ? 'Resume' : 'Run'}
                         </button>
@@ -260,7 +276,8 @@ const Sidebar = () => {
                             setIsPlaying(false);
                             nextStep();
                         }}
-                        className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors"
+                        disabled={isPlaying || nodes.length === 0}
+                        className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Next Step"
                     >
                         <ChevronRight className="w-4 h-4" />
@@ -269,7 +286,8 @@ const Sidebar = () => {
 
                 <button
                     onClick={resetAlgorithm}
-                    className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-medium transition-colors"
+                    disabled={nodes.length === 0}
+                    className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Clear current progress"
                 >
                     Reset Progress

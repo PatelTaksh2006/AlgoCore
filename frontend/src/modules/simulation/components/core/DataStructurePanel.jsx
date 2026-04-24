@@ -20,11 +20,12 @@ const DataStructurePanel = ({ constraintsRef }) => {
   const panelRef = useRef(null);
   const hasPositionedRef = useRef(false);
   const hasManualResizeRef = useRef(false);
+  const resizeStateRef = useRef(null);
+  const resizeFrameRef = useRef(null);
   const dragControls = useDragControls();
   const persistedPanelStateRef = useRef(loadDataStructurePanelState());
 
   const isRoutingAlgorithm = ['distanceVector', 'linkState'].includes(selectedAlgorithm);
-  const isFloydWarshall = selectedAlgorithm === 'floydWarshall';
 
   const getTypeLabel = () => {
     if (selectedAlgorithm === 'dfs') return 'Stack';
@@ -43,10 +44,9 @@ const DataStructurePanel = ({ constraintsRef }) => {
     const ids = ['primaryDS', 'parent', 'visited'];
     if (selectedAlgorithm === 'scc') ids.push('scc');
     if (selectedAlgorithm === 'articulationPoints') ids.push('ap');
-    if (isFloydWarshall) ids.push('floyd');
     if (isRoutingAlgorithm) ids.push('routing');
     return ids;
-  }, [selectedAlgorithm, isFloydWarshall, isRoutingAlgorithm]);
+  }, [selectedAlgorithm, isRoutingAlgorithm]);
 
   const orderedVisibleSectionIds = useMemo(() => {
     const visibleSet = new Set(visibleSectionIds);
@@ -70,7 +70,7 @@ const DataStructurePanel = ({ constraintsRef }) => {
     return map;
   }, [nodes]);
 
-  const defaultPanelWidth = isFloydWarshall ? 700 : 600;
+  const defaultPanelWidth = 600;
   const [panelSize, setPanelSize] = useState(() => {
     const savedSize = persistedPanelStateRef.current?.panelSize;
     if (savedSize?.width && savedSize?.height) {
@@ -147,33 +147,95 @@ const DataStructurePanel = ({ constraintsRef }) => {
     y.set(boundedPosition.y);
   }, [clampPosition, clampSize, panelSize, x, y]);
 
-  useEffect(() => {
-    const panelEl = panelRef.current;
-    if (!panelEl) {
-      return undefined;
+  const endResize = useCallback(() => {
+    const resizeData = resizeStateRef.current;
+
+    if (resizeFrameRef.current) {
+      cancelAnimationFrame(resizeFrameRef.current);
+      resizeFrameRef.current = null;
     }
 
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
+    if (resizeData) {
+      window.removeEventListener('pointermove', resizeData.onPointerMove);
+      window.removeEventListener('pointerup', resizeData.onPointerUp);
+      window.removeEventListener('pointercancel', resizeData.onPointerUp);
+      resizeStateRef.current = null;
+    }
+
+    syncPanelWithinViewport();
+    persistPanelState();
+  }, [persistPanelState, syncPanelWithinViewport]);
+
+  const startResize = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    hasManualResizeRef.current = true;
+
+    const resizeData = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidth: panelSize.width,
+      startHeight: panelSize.height,
+      nextWidth: panelSize.width,
+      nextHeight: panelSize.height,
+      rafScheduled: false,
+      onPointerMove: null,
+      onPointerUp: null,
+    };
+
+    const onPointerMove = (moveEvent) => {
+      const deltaX = moveEvent.clientX - resizeData.startX;
+      const deltaY = moveEvent.clientY - resizeData.startY;
+      const bounded = clampSize(resizeData.startWidth + deltaX, resizeData.startHeight + deltaY);
+
+      resizeData.nextWidth = bounded.width;
+      resizeData.nextHeight = bounded.height;
+
+      if (!resizeData.rafScheduled) {
+        resizeData.rafScheduled = true;
+        resizeFrameRef.current = requestAnimationFrame(() => {
+          resizeData.rafScheduled = false;
+          setPanelSize((current) => {
+            if (current.width === resizeData.nextWidth && current.height === resizeData.nextHeight) {
+              return current;
+            }
+            return { width: resizeData.nextWidth, height: resizeData.nextHeight };
+          });
+        });
       }
+    };
 
-      const bounded = clampSize(entry.contentRect.width, entry.contentRect.height);
-      setPanelSize((current) => {
-        if (current.width === bounded.width && current.height === bounded.height) {
-          return current;
-        }
-        hasManualResizeRef.current = true;
-        return bounded;
-      });
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+      resizeStateRef.current = null;
+      endResize();
+    };
 
-      syncPanelWithinViewport(bounded);
-    });
+    resizeData.onPointerMove = onPointerMove;
+    resizeData.onPointerUp = onPointerUp;
+    resizeStateRef.current = resizeData;
 
-    observer.observe(panelEl);
-    return () => observer.disconnect();
-  }, [clampSize, syncPanelWithinViewport]);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+  }, [clampSize, endResize, panelSize.height, panelSize.width]);
+
+  useEffect(() => {
+    return () => {
+      if (resizeFrameRef.current) {
+        cancelAnimationFrame(resizeFrameRef.current);
+      }
+      const resizeData = resizeStateRef.current;
+      if (resizeData) {
+        window.removeEventListener('pointermove', resizeData.onPointerMove);
+        window.removeEventListener('pointerup', resizeData.onPointerUp);
+        window.removeEventListener('pointercancel', resizeData.onPointerUp);
+      }
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const container = constraintsRef?.current;
@@ -241,7 +303,6 @@ const DataStructurePanel = ({ constraintsRef }) => {
         height: panelSize.height,
         minWidth: MIN_PANEL_WIDTH,
         minHeight: MIN_PANEL_HEIGHT,
-        resize: 'both',
         willChange: 'transform',
       }}
       className="absolute bg-white/92 backdrop-blur-md rounded-xl shadow-lg border border-gray-200 p-3 flex flex-col gap-3 z-20 overflow-hidden touch-none"
@@ -274,6 +335,16 @@ const DataStructurePanel = ({ constraintsRef }) => {
           activeTableNodeId={activeTableNodeId}
         />
       </LayoutGroup>
+
+      <button
+        type="button"
+        onPointerDown={startResize}
+        className="absolute bottom-1 right-1 h-5 w-5 cursor-se-resize rounded-sm border border-gray-200 bg-white/90 text-gray-400 hover:text-gray-600"
+        aria-label="Resize data structure panel"
+        title="Resize"
+      >
+        <span className="pointer-events-none block text-[10px] leading-none">//</span>
+      </button>
     </motion.div>
   );
 };

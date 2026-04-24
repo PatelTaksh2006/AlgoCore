@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { useGraph } from '../context/GraphContext';
+import { useAlgorithm } from '../../algorithm/context/AlgorithmContext';
 import InteractionModal from './InteractionModal';
 
 const Edge = ({ edge, sourceNode, targetNode, isDirected }) => {
-    const { updateEdgeWeight, removeEdge } = useGraph();
+    const { updateEdgeWeight, removeEdge, isTransposedView } = useGraph();
+    const { isPlaying } = useAlgorithm();
     const [showEditModal, setShowEditModal] = useState(false);
     const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
     
     if (!sourceNode || !targetNode) return null;
+
+    const renderedSource = isTransposedView ? targetNode : sourceNode;
+    const renderedTarget = isTransposedView ? sourceNode : targetNode;
 
     // Calculate distinct colors/styles based on classification
     let strokeColor = '#9ca3af'; // gray-400
@@ -42,10 +47,14 @@ const Edge = ({ edge, sourceNode, targetNode, isDirected }) => {
         markerId = "url(#arrowhead-back)";
     }
 
-    const midX = (sourceNode.x + targetNode.x) / 2;
-    const midY = (sourceNode.y + targetNode.y) / 2;
+    const midX = (renderedSource.x + renderedTarget.x) / 2;
+    const midY = (renderedSource.y + renderedTarget.y) / 2;
 
     const handleClick = (e) => {
+        if (isPlaying) {
+            return;
+        }
+
         e.stopPropagation();
         // Single click opens edit modal
         setModalPosition({ x: e.clientX, y: e.clientY });
@@ -53,32 +62,40 @@ const Edge = ({ edge, sourceNode, targetNode, isDirected }) => {
     };
 
     const handleSave = (data) => {
+        if (isPlaying) {
+            return;
+        }
+
         if (data.weight !== undefined) {
             updateEdgeWeight(edge.id, data.weight);
         }
     };
 
     const handleDelete = () => {
+        if (isPlaying) {
+            return;
+        }
+
         removeEdge(edge.id);
     };
 
     return (
         <>
-            <g style={{ pointerEvents: 'stroke', cursor: 'pointer' }} onClick={handleClick}>
+            <g data-pan-block="true" style={{ pointerEvents: 'stroke', cursor: isPlaying ? 'not-allowed' : 'pointer' }} onClick={handleClick}>
                 {/* Invisible wider line for easier clicking */}
                 <line
-                    x1={sourceNode.x}
-                    y1={sourceNode.y}
-                    x2={targetNode.x}
-                    y2={targetNode.y}
+                    x1={renderedSource.x}
+                    y1={renderedSource.y}
+                    x2={renderedTarget.x}
+                    y2={renderedTarget.y}
                     stroke="transparent"
                     strokeWidth={15}
                 />
                 <line
-                    x1={sourceNode.x}
-                    y1={sourceNode.y}
-                    x2={targetNode.x}
-                    y2={targetNode.y}
+                    x1={renderedSource.x}
+                    y1={renderedSource.y}
+                    x2={renderedTarget.x}
+                    y2={renderedTarget.y}
                     stroke={strokeColor}
                     strokeWidth={strokeWidth}
                     strokeDasharray={strokeDasharray}

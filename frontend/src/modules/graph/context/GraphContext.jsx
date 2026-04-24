@@ -14,6 +14,7 @@ export const GraphProvider = ({ children }) => {
     const [nodes, setNodes] = useState(initialState?.nodes ?? []);
     const [edges, setEdges] = useState(initialState?.edges ?? []);
     const [isDirected, setIsDirected] = useState(initialState?.isDirected ?? false);
+    const [isTransposedView, setIsTransposedView] = useState(false);
     const [selectedNodeForEdge, setSelectedNodeForEdge] = useState(null); // For two-click edge creation
     const persistTimeoutRef = useRef(null);
 
@@ -104,6 +105,8 @@ export const GraphProvider = ({ children }) => {
     const resetGraph = useCallback(() => {
         setNodes([]);
         setEdges([]);
+        setIsTransposedView(false);
+        setSelectedNodeForEdge(null);
     }, []);
 
     const clearClassification = useCallback(() => {
@@ -114,11 +117,13 @@ export const GraphProvider = ({ children }) => {
         setNodes(normalizeNodesForLoad(newNodes));
         setEdges(normalizeEdgesForLoad(newEdges));
         setIsDirected(newIsDirected);
+        setIsTransposedView(false);
     }, []);
 
     return (
         <GraphContext.Provider value={{
             nodes, edges, isDirected, setIsDirected,
+            isTransposedView, setIsTransposedView,
             addNode, updateNodePos, removeNode,
             addEdge, updateEdgeWeight, updateNodeLabel, removeEdge, resetGraph, clearClassification,
             setEdgeClassification, setNodeColor, loadGraphData,

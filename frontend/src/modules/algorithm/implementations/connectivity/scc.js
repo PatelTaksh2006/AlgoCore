@@ -1,6 +1,8 @@
 import { edgeIsUndirected, orderNodesFromStart, buildAdjacencyMap } from '../../core/helpers.js';
 
 export function* scc(nodes, edges, startNodeId) {
+  yield { type: 'SET_TRANSPOSE_VIEW', isTransposed: false };
+
   const orderedNodes = orderNodesFromStart(nodes, startNodeId || nodes[0]?.id);
   const firstPassAdj = buildAdjacencyMap(nodes, edges);
 
@@ -110,6 +112,7 @@ export function* scc(nodes, edges, startNodeId) {
   yield { type: 'RESET_VISITED' };
   yield { type: 'RESET_PARENT' };
   yield { type: 'RESET_COMPONENTS' };
+  yield { type: 'SET_TRANSPOSE_VIEW', isTransposed: true };
   yield {
     type: 'SET_RESULT_DATA',
     data: {
@@ -187,6 +190,7 @@ export function* scc(nodes, edges, startNodeId) {
       originalGraph: { nodes, edges },
     },
   };
+  yield { type: 'SET_TRANSPOSE_VIEW', isTransposed: false };
   yield { type: 'SET_LINE', lineIndex: -1 };
   yield { type: 'LOG', message: 'Kosaraju SCC Completed' };
 }

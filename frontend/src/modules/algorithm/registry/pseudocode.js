@@ -29,6 +29,16 @@ export const PSEUDOCODE = {
         "        dist[v] = alt",      // 7
         "        Q.decreaseKey(v, alt)" // 8
     ],
+    floydWarshall: [
+        "function FloydWarshall(G):",                 // 0
+        "  initialize dist and next matrices",        // 1
+        "  for each intermediate node k:",            // 2
+        "    for each source i:",                     // 3
+        "      for each destination j:",              // 4
+        "        if dist[i][j] > dist[i][k] + dist[k][j]:", // 5
+        "          dist[i][j] = dist[i][k] + dist[k][j]",   // 6
+        "          next[i][j] = next[i][k]"           // 7
+    ],
     prim: [
         "function Prim(start):",      // 0
         "  key[start] = 0, Q.push(start)", // 1
@@ -82,10 +92,10 @@ export const PSEUDOCODE = {
         "        notify neighbors"           // 5
     ],
     linkState: [
-        "function LinkStateRouting():",      // 0
-        "  Flooding Phase: Broadcast LSAs",  // 1
-        "  For each node u:",                // 2
-        "    Run Dijkstra(u) on LSDB",       // 3
-        "    Update Routing Table of u"      // 4
+        "function LinkStateRouting(routeNode):",                  // 0
+        "  For each node u: discover direct neighbors",           // 1
+        "  For each node u: flood LSA to build LSDB",             // 2
+        "  routeNode runs Dijkstra(LSDB)",                        // 3
+        "  Update routeNode forwarding table with best next hops" // 4
     ]
 };

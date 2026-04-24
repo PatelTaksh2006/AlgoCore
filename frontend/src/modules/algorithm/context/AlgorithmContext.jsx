@@ -11,7 +11,7 @@ const AlgorithmContext = createContext();
 export const useAlgorithm = () => useContext(AlgorithmContext);
 
 export const AlgorithmProvider = ({ children }) => {
-    const { nodes, edges, isDirected, clearClassification, setEdgeClassification, setNodeColor } = useGraph();
+    const { nodes, edges, isDirected, clearClassification, setEdgeClassification, setNodeColor, setIsTransposedView } = useGraph();
     
     // Initialize from localStorage if available
     const initialStateRef = useRef(loadAlgorithmState());
@@ -46,12 +46,13 @@ export const AlgorithmProvider = ({ children }) => {
         clearClassification,
         setEdgeClassification,
         setNodeColor,
+        setIsTransposedView,
         setCurrentLine,
         setVisited,
         setParent,
         setComponents,
         setLogs,
-    }), [clearClassification, setEdgeClassification, setNodeColor]);
+    }), [clearClassification, setEdgeClassification, setNodeColor, setIsTransposedView]);
 
     const {
         isPlaying,

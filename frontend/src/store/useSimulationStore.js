@@ -3,6 +3,17 @@ import { saveStoreState, loadStoreState } from '../utils/persistenceUtils';
 
 const initialStoreState = loadStoreState() || {};
 
+const emptySimulationState = {
+  activeDS: [],
+  dsAction: null,
+  backEdges: [],
+  routingTable: {},
+  activeTableNodeId: null,
+  internalState: null,
+  resultData: null,
+  lsdb: [],
+};
+
 const initialSimulationState = {
   activeDS: initialStoreState.activeDS ?? [],
   dsAction: null,
@@ -29,4 +40,5 @@ useSimulationStore.subscribe((state) => {
 });
 
 export { initialSimulationState };
+export { emptySimulationState };
 export default useSimulationStore;

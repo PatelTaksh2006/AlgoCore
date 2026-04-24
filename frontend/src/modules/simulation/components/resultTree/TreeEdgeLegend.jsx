@@ -38,7 +38,6 @@ const getTreeLegendConfig = (selectedAlgorithm) => {
       return [
         { label: 'DFS tree edge', color: '#2563eb' },
         { label: 'Back edge', color: '#ef4444', dashed: true },
-        { label: 'Articulation point node', color: '#f97316' },
       ];
     default:
       return [];

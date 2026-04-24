@@ -1,9 +1,10 @@
-import React, { useMemo, useRef, useState, useCallback } from 'react';
+import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 import Node from './Node';
 import Edge from './Edge';
 import useSimulationStore from '../../../store/useSimulationStore';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { useAlgorithm } from '../../algorithm/context/AlgorithmContext';
 
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
@@ -11,6 +12,7 @@ const ZOOM_STEP = 0.15;
 
 const GraphCanvas = () => {
     const { nodes, edges, updateNodePos, isDirected, addNode, selectedNodeForEdge, setSelectedNodeForEdge } = useGraph();
+    const { isPlaying } = useAlgorithm();
     const resultData = useSimulationStore((state) => state.resultData);
     const canvasRef = useRef(null);
 
@@ -45,10 +47,20 @@ const GraphCanvas = () => {
     }, [zoom, pan]);
 
     const handleDoubleClick = (e) => {
+        if (isPlaying) {
+            return;
+        }
+
         if (!canvasRef.current) return;
         const { x, y } = screenToCanvas(e.clientX, e.clientY);
         addNode(x, y);
     };
+
+    useEffect(() => {
+        if (isPlaying && selectedNodeForEdge) {
+            setSelectedNodeForEdge(null);
+        }
+    }, [isPlaying, selectedNodeForEdge, setSelectedNodeForEdge]);
 
     const handleCanvasClick = (e) => {
         // Only clear selection if clicking directly on canvas (not on nodes)
@@ -68,7 +80,11 @@ const GraphCanvas = () => {
 
     // Pan with middle mouse or Ctrl+click
     const handleMouseDown = useCallback((e) => {
-        if (e.button === 1 || (e.button === 0 && e.altKey)) {
+        // Check if click is on a node or edge (SVG element)
+        const isOnNodeOrEdge = e.target.closest('motion.div') || e.target.closest('svg g');
+        
+        // Allow panning with: middle mouse, Alt+left-click, or left-click on empty canvas
+        if (e.button === 1 || (e.button === 0 && e.altKey) || (e.button === 0 && !isOnNodeOrEdge && (e.target === canvasRef.current || e.target.tagName === 'svg'))) {
             e.preventDefault();
             isPanningRef.current = true;
             panStartRef.current = {
