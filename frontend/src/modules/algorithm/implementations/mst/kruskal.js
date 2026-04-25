@@ -51,6 +51,7 @@ export function* kruskal(nodes, edges, startNodeId) {
 
   for (const edge of sortedEdges) {
     yield { type: 'LOG', message: `Checking edge (${edge.weight})` };
+    yield { type: 'SET_ACTIVE_EDGE', edgeId: edge.id };
     yield { type: 'SET_LINE', lineIndex: 3 };
 
     if (union(edge.source, edge.target)) {
@@ -67,6 +68,7 @@ export function* kruskal(nodes, edges, startNodeId) {
       yield { type: 'LOG', message: 'Cycle detected - Discarded' };
     }
 
+    yield { type: 'SET_ACTIVE_EDGE', edgeId: null };
     yield { type: 'SET_LINE', lineIndex: 2 };
   }
 

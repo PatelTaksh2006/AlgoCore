@@ -159,6 +159,12 @@ const Sidebar = () => {
                         <option value="linkState">Link State Routing</option>
                         <option value="floydWarshall">Floyd-Warshall (APSP)</option>
                     </select>
+
+                    {isDirected && (selectedAlgorithm === 'prim' || selectedAlgorithm === 'kruskal') && (
+                        <div className="mt-1 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-md text-[11px] text-amber-700 font-medium">
+                            ⚠ MST requires undirected graphs. Edges will be treated as undirected.
+                        </div>
+                    )}
                     
                     {selectedAlgorithm !== 'kruskal' && selectedAlgorithm !== 'scc' && selectedAlgorithm !== 'floydWarshall' && (
                         <div className="mt-2 text-sm text-gray-600">

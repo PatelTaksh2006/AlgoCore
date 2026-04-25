@@ -5,7 +5,7 @@ export const PSEUDOCODE = {
         "  for each neighbor v of u:",// 2
         "    if v is Unvisited:",     // 3
         "      DFS(v)",               // 4
-        "  mark u as Finished (Black)"// 5
+        "  mark u as Finished (Blue)"// 5
     ],
     bfs: [
         "function BFS(start):",       // 0

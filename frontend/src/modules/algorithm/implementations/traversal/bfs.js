@@ -63,6 +63,7 @@ export function* bfs(nodes, edges, startNodeId) {
         }
 
         const v = edge.to;
+        yield createStep(STEP_TYPES.SET_ACTIVE_EDGE, { edgeId: edge.id });
         yield createStep(STEP_TYPES.SET_LINE, { lineIndex: 6 });
 
         if (colors[v] === 'WHITE') {
@@ -89,7 +90,8 @@ export function* bfs(nodes, edges, startNodeId) {
             yield createStep(STEP_TYPES.CLASSIFY_EDGE, { edgeId: edge.id, classification: 'cross' });
           }
         }
-
+        
+        yield createStep(STEP_TYPES.SET_ACTIVE_EDGE, { edgeId: null });
         yield createStep(STEP_TYPES.SET_LINE, { lineIndex: 5 });
       }
 

@@ -12,9 +12,14 @@ const ZOOM_STEP = 0.15;
 
 const GraphCanvas = () => {
     const { nodes, edges, updateNodePos, isDirected, addNode, selectedNodeForEdge, setSelectedNodeForEdge } = useGraph();
-    const { isPlaying } = useAlgorithm();
+    const { isPlaying, selectedAlgorithm } = useAlgorithm();
     const resultData = useSimulationStore((state) => state.resultData);
     const canvasRef = useRef(null);
+
+    // MST algorithms force undirected even if the toggle is ON
+    const effectiveDirected = (selectedAlgorithm === 'prim' || selectedAlgorithm === 'kruskal')
+        ? false
+        : isDirected;
 
     // Zoom & pan state
     const [zoom, setZoom] = useState(1);
@@ -197,6 +202,9 @@ const GraphCanvas = () => {
                         <marker id="arrowhead-cross" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
                             <polygon points="0 0, 10 3.5, 0 7" fill="#111827" />
                         </marker>
+                        <marker id="arrowhead-exploring" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#f97316" />
+                        </marker>
                     </defs>
                     {edges.map(edge => (
                         <Edge
@@ -204,7 +212,7 @@ const GraphCanvas = () => {
                             edge={edge}
                             sourceNode={nodeById.get(edge.source)}
                             targetNode={nodeById.get(edge.target)}
-                            isDirected={isDirected}
+                            isDirected={effectiveDirected}
                         />
                     ))}
                     
@@ -232,7 +240,7 @@ const GraphCanvas = () => {
                                 fill="transparent"
                                 stroke="#22c55e"
                                 strokeWidth="5"
-                                markerEnd={isDirected ? "url(#arrowhead-solution)" : undefined}
+                                markerEnd={effectiveDirected ? "url(#arrowhead-solution)" : undefined}
                                 style={{ filter: "drop-shadow(0px 0px 4px rgba(34,197,94,0.6))" }}
                             />
                         );

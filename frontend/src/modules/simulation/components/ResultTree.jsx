@@ -57,6 +57,15 @@ const ResultTree = () => {
     ? edges
     : classifiedTreeEdges;
 
+  const isMSTAlgo = selectedAlgorithm === 'prim' || selectedAlgorithm === 'kruskal';
+
+  const mstTotalWeight = useMemo(() => {
+    if (!isMSTAlgo) return null;
+    const treeEdges = classifiedTreeEdges.filter(e => e.classification === 'tree');
+    if (treeEdges.length === 0) return null;
+    return treeEdges.reduce((sum, e) => sum + Number(e.weight || 0), 0);
+  }, [isMSTAlgo, classifiedTreeEdges]);
+
   const isDijkstraResult = selectedAlgorithm === 'dijkstra' && resultData?.type === 'dijkstraPath' && resultData.dist;
   const dvFinalResult = selectedAlgorithm === 'distanceVector' && resultData?.type === 'distanceVectorFinal' ? resultData : null;
 
@@ -314,22 +323,49 @@ const ResultTree = () => {
           }
 
           const { strokeColor, strokeDasharray, strokeWidth } = resolveEdgeStyle(edge);
+          const edgeMidX = (sourcePos.x + targetPos.x) / 2;
+          const edgeMidY = (sourcePos.y + targetPos.y) / 2;
           return (
-            <motion.line
-              key={edge.id}
-              data-pan-block="true"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              transition={{ duration: 0.35 }}
-              x1={sourcePos.x}
-              y1={sourcePos.y}
-              x2={targetPos.x}
-              y2={targetPos.y}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-              strokeDasharray={strokeDasharray}
-              markerEnd="url(#tree-arrow)"
-            />
+            <g key={edge.id}>
+              <motion.line
+                data-pan-block="true"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                transition={{ duration: 0.35 }}
+                x1={sourcePos.x}
+                y1={sourcePos.y}
+                x2={targetPos.x}
+                y2={targetPos.y}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
+                strokeDasharray={strokeDasharray}
+                markerEnd={isMSTAlgo ? undefined : "url(#tree-arrow)"}
+              />
+              {isMSTAlgo && edge.classification === 'tree' && (
+                <g>
+                  <rect
+                    x={edgeMidX - 12}
+                    y={edgeMidY - 9}
+                    width={24}
+                    height={16}
+                    rx={4}
+                    fill="white"
+                    stroke="#bfdbfe"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={edgeMidX}
+                    y={edgeMidY + 4}
+                    fill="#2563eb"
+                    fontSize="10"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                  >
+                    {edge.weight}
+                  </text>
+                </g>
+              )}
+            </g>
           );
         })}
 
@@ -449,6 +485,21 @@ const ResultTree = () => {
                 </span>
               );
             })}
+          </div>
+        </div>
+      )}
+      {isMSTAlgo && mstTotalWeight !== null && (
+        <div className="absolute bottom-0 left-0 right-0 border-t border-blue-200 bg-white px-4 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600 mb-1">
+            Minimum Spanning Tree
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
+              Total Weight: {mstTotalWeight}
+            </span>
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
+              Edges: {classifiedTreeEdges.filter(e => e.classification === 'tree').length}
+            </span>
           </div>
         </div>
       )}

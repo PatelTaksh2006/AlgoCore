@@ -1,15 +1,20 @@
 import { algorithms } from '../registry/algorithms.js';
 
-function freezeSnapshot(nodes, edges, isDirected) {
+function freezeSnapshot(nodes, edges, isDirected, selectedAlgorithm) {
+  // MST algorithms only work on undirected graphs — force undirected
+  const effectiveDirected = (selectedAlgorithm === 'prim' || selectedAlgorithm === 'kruskal')
+    ? false
+    : isDirected;
+
   const frozenNodes = Object.freeze(
     nodes.map((node) => Object.freeze({ ...node }))
   );
 
   const frozenEdges = Object.freeze(
-    edges.map((edge) => Object.freeze({ ...edge, directed: isDirected }))
+    edges.map((edge) => Object.freeze({ ...edge, directed: effectiveDirected }))
   );
 
-  return Object.freeze({ nodes: frozenNodes, edges: frozenEdges, isDirected });
+  return Object.freeze({ nodes: frozenNodes, edges: frozenEdges, isDirected: effectiveDirected });
 }
 
 function resolveStartTarget({ selectedAlgorithm, startNodeId, targetNodeId, nodes }) {
@@ -38,7 +43,7 @@ export function createAlgorithmGenerator({
     return null;
   }
 
-  const snapshot = freezeSnapshot(nodes, edges, isDirected);
+  const snapshot = freezeSnapshot(nodes, edges, isDirected, selectedAlgorithm);
   const { evaluatedStartNode, evaluatedTargetNode } = resolveStartTarget({
     selectedAlgorithm,
     startNodeId,

@@ -62,6 +62,7 @@ export function* prim(nodes, edges, startNodeId) {
         const v = edge.to;
         const weight = Number(edge.weight);
 
+        yield { type: 'SET_ACTIVE_EDGE', edgeId: edge.id };
         yield { type: 'SET_LINE', lineIndex: 6 };
 
         if (!inMST[v] && weight < key[v]) {
@@ -81,6 +82,7 @@ export function* prim(nodes, edges, startNodeId) {
           yield { type: 'SET_LINE', lineIndex: 9 };
         }
 
+        yield { type: 'SET_ACTIVE_EDGE', edgeId: null };
         yield { type: 'SET_LINE', lineIndex: 5 };
       }
 

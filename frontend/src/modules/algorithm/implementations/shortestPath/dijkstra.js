@@ -157,6 +157,7 @@ export function* dijkstra(nodes, edges, startNodeId, targetNodeId) {
       const v = edge.to;
       const weight = Number(edge.weight);
 
+      yield { type: 'SET_ACTIVE_EDGE', edgeId: edge.id };
       yield { type: 'SET_LINE', lineIndex: 5 };
       yield { type: 'SET_LINE', lineIndex: 6 };
 
@@ -177,6 +178,7 @@ export function* dijkstra(nodes, edges, startNodeId, targetNodeId) {
         yield { type: 'SET_LINE', lineIndex: 8 };
       }
 
+      yield { type: 'SET_ACTIVE_EDGE', edgeId: null };
       yield { type: 'SET_LINE', lineIndex: 4 };
     }
 

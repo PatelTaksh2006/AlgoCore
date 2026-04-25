@@ -104,6 +104,9 @@ export function createStepInterpreter({
       case STEP_TYPES.SET_TRANSPOSE_VIEW:
         setIsTransposedView(Boolean(stepData.isTransposed));
         break;
+      case STEP_TYPES.SET_ACTIVE_EDGE:
+        mutate(() => ({ activeEdgeId: stepData.edgeId }));
+        break;
       default:
         break;
     }

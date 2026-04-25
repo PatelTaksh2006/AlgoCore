@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useGraph } from '../context/GraphContext';
 import { useAlgorithm } from '../../algorithm/context/AlgorithmContext';
+import useSimulationStore from '../../../store/useSimulationStore';
 import InteractionModal from './InteractionModal';
 
 const Edge = ({ edge, sourceNode, targetNode, isDirected }) => {
     const { updateEdgeWeight, removeEdge, isTransposedView } = useGraph();
     const { isPlaying } = useAlgorithm();
+    const activeEdgeId = useSimulationStore((state) => state.activeEdgeId);
     const [showEditModal, setShowEditModal] = useState(false);
     const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
     
@@ -15,33 +17,40 @@ const Edge = ({ edge, sourceNode, targetNode, isDirected }) => {
     const renderedTarget = isTransposedView ? sourceNode : targetNode;
 
     // Calculate distinct colors/styles based on classification
+    // If the edge is currently being actively analyzed, override the style
+    const effectiveClassification = edge.id === activeEdgeId ? 'exploring' : edge.classification;
+
     let strokeColor = '#9ca3af'; // gray-400
     let strokeDasharray = '0';
     let strokeWidth = 2;
 
     let markerId = "url(#arrowhead-default)";
 
-    if (edge.classification === 'tree') {
+    if (effectiveClassification === 'exploring') {
+        strokeColor = '#f97316'; // orange-500
+        strokeWidth = 4;
+        markerId = "url(#arrowhead-exploring)";
+    } else if (effectiveClassification === 'tree') {
         strokeColor = '#2563eb'; // blue-600
         strokeWidth = 3;
         markerId = "url(#arrowhead-tree)";
-    } else if (edge.classification === 'solution') {
+    } else if (effectiveClassification === 'solution') {
         strokeColor = '#22c55e'; // green-500
         strokeWidth = 4;
         markerId = "url(#arrowhead-solution)";
-    } else if (edge.classification === 'back') {
+    } else if (effectiveClassification === 'back') {
         strokeColor = '#dc2626'; // red-600
         strokeDasharray = '5,5';
         markerId = "url(#arrowhead-back)";
-    } else if (edge.classification === 'forward') {
+    } else if (effectiveClassification === 'forward') {
         strokeColor = '#16a34a'; // green-600
         strokeDasharray = '4,2';
         markerId = "url(#arrowhead-forward)";
-    } else if (edge.classification === 'cross') {
+    } else if (effectiveClassification === 'cross') {
         strokeColor = '#111827'; // gray-900
         strokeDasharray = '2,2';
         markerId = "url(#arrowhead-cross)";
-    } else if (edge.classification === 'cycle') {
+    } else if (effectiveClassification === 'cycle') {
         strokeColor = '#b91c1c'; // red-700
         strokeDasharray = '6,4';
         markerId = "url(#arrowhead-back)";

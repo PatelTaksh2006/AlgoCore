@@ -49,6 +49,7 @@ export function* dfs(nodes, edges, startNodeId) {
       const v = edge.to;
       const edgeId = edge.id;
 
+      yield { type: 'SET_ACTIVE_EDGE', edgeId };
       yield { type: 'SET_LINE', lineIndex: 3 };
 
       if (colors[v] === 'WHITE') {
@@ -69,6 +70,8 @@ export function* dfs(nodes, edges, startNodeId) {
           yield { type: 'CLASSIFY_EDGE', edgeId, classification: 'cross' };
         }
       }
+      
+      yield { type: 'SET_ACTIVE_EDGE', edgeId: null };
     }
 
     colors[u] = 'BLACK';

@@ -16,6 +16,7 @@ export const STEP_TYPES = {
   ADD_LSA: 'ADD_LSA',
   SET_RESULT_DATA: 'SET_RESULT_DATA',
   SET_TRANSPOSE_VIEW: 'SET_TRANSPOSE_VIEW',
+  SET_ACTIVE_EDGE: 'SET_ACTIVE_EDGE',
 } as const;
 
 export type StepType = (typeof STEP_TYPES)[keyof typeof STEP_TYPES];
@@ -37,7 +38,8 @@ export type AlgorithmStep =
   | { type: typeof STEP_TYPES.SET_ACTIVE_TABLE_NODE; nodeId: string | null; internalState?: Record<string, unknown> }
   | { type: typeof STEP_TYPES.ADD_LSA; lsa: Record<string, unknown>; internalState?: Record<string, unknown> }
   | { type: typeof STEP_TYPES.SET_RESULT_DATA; data: Record<string, unknown>; internalState?: Record<string, unknown> }
-  | { type: typeof STEP_TYPES.SET_TRANSPOSE_VIEW; isTransposed: boolean; internalState?: Record<string, unknown> };
+  | { type: typeof STEP_TYPES.SET_TRANSPOSE_VIEW; isTransposed: boolean; internalState?: Record<string, unknown> }
+  | { type: typeof STEP_TYPES.SET_ACTIVE_EDGE; edgeId: string | null; internalState?: Record<string, unknown> };
 
 export type AlgorithmGenerator = Generator<AlgorithmStep, void, unknown>;
 
